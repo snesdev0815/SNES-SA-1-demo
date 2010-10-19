@@ -1,0 +1,21 @@
+.section "boot script"
+bootstrap:
+.ACCU 16
+.INDEX 16
+
+	NEW Rng.CLS.PTR hashPtr.1
+	NEW Spc.CLS.PTR hashPtr.2
+	NEW Demo.CLS.PTR oopCreateNoPtr
+	
+	CALL kill_Rng.MTD hashPtr.1
+	CALL Spc.playSong.MTD hashPtr.2 rez_bubbletoast2.PTR
+	CALL Spc.SpcSetReportType.MTD hashPtr.2 3
+
+
+	WAIT_IMMEDIATE FrameCounter ">=" 1000
+
+
+
+	DIE
+
+.ends

@@ -1,0 +1,15 @@
+[objects]
+routines/main.o
+routines/nmi.o
+routines/irq.o
+routines/demo.o
+routines/rng.o
+routines/sa1interface.o
+routines/spcinterface.o
+routines/oop.o
+routines/memoryclear.o
+routines/exception.o
+routines/textstrings.o
+routines/script.o
+routines/scenes.o
+routines/hdma.o

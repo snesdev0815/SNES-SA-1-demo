@@ -1,0 +1,11 @@
+TODO:
+-update routine name while dispatching obj methods
+-implement stall detection during nmi
+-make sa1interface sub-obj of demo
+
+DONE:
+-implemention script trash detection
+-find out why script save cpu status doesnt work
+-implement obj routine exec data return (returns a,x,y for now)
+-implement script termination & garbage collection macro
+

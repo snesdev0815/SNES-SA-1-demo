@@ -1,0 +1,7 @@
+.section "infin nest script"
+infinNest:
+.ACCU 16
+.INDEX 16
+	NEW Script.CLS.PTR oopCreateNoPtr infinNest.PTR
+	rtl
+.ends
