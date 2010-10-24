@@ -20,7 +20,7 @@ SPCSFILES  = data/apu/apucode.asm
 SPCOFILES  = $(SPCSFILES:.asm=.o)
 SPCFILE = $(SPCSFILES:.asm=.bin)
 
-all: $(blndframes) spc $(objects)
+all: spc $(objects)
 	$(LD) $(LDFLAGS) $(linkfile) $(ROMFILE)
 	
 $(objects): $(sources)
