@@ -1,4 +1,5 @@
 .include "routines/conf/config.inc"
+.include "routines/conf/sa1.registers"
 
 .define polyLen 7	;quick hack, this should be made according to vertex structs 
 .define dmaFillThresh 10	;if poly-span is longer than this, do dma fill

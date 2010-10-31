@@ -3,71 +3,65 @@
 .section "demo main handler"
 ;quick & dirty setup
 init_Demo:
-sep #$20
-lda #$80				;force blank
-sta.l $002100
-lda #0
-sta.l $004200			;disable irqs
+	sep #$20
+	lda #INIDSP_FORCE_BLANK				;force blank
+	sta.l INIDSP
+	lda #0
+	sta.l NMITIMEN			;disable irqs
 
-lda #0
-sta.w BGTilesVram12
+	lda #0
+	sta.w BGTilesVram12
 
-lda #$ffff>>8 &$f0
-sta.w BG1TilemapVram
+	lda #$ffff>>8 &$f0
+	sta.w BG1TilemapVram
 
-lda #3
-sta.w ScreenMode
+	lda #BGMODE_MODE_3
+	sta.w ScreenMode
 
-lda #%00000001
-sta.w MainScreen
-lda #%00000001
-sta.w SubScreen
+	lda #T_BG1_ENABLE
+	sta.w MainScreen
+	lda #T_BG1_ENABLE
+	sta.w SubScreen
 
-lda #%00100001
-sta.w CgadsubConfig
-lda #0
-sta.w WMS
-sta.l $00212f
-sta.w CGWsel
-;lda #%00000111
+	lda #CGADSUB_BAC_ENABLE | CGADSUB_BG1_ENABLE
+	sta.w CgadsubConfig
+	lda #0
+	sta.w windowMainscreen
+	sta.l TSW
+	sta.w colorAdditionSelect
 
-;sta.l FixedColourB
-jsr UploadDebugPalette
-jsr setupTilemap
+	jsr UploadDebugPalette
+	jsr setupTilemap
 
 
-lda #$ff
-sta.w ScreenBrightness
-lda.w InterruptEnableFlags
-sta.l $004200
+	lda #$ff
+	sta.w ScreenBrightness
+	lda.w InterruptEnableFlags
+	sta.l NMITIMEN
 
-rep #$31
-;stz.w rendererFrame
-;lda #0
-;sta.w rendererScene
-lda #-(((28-frameResY)/2)*8)
-sta.w BG1VOf
+	rep #$31
+	lda #-(((28-frameResY)/2)*8)
+	sta.w yScrollBG1
 
-	NEW Sa1Iface.CLS.PTR rendererPTR
-	NEW Spc.CLS.PTR soundPTR
+		NEW Sa1Iface.CLS.PTR rendererPTR
+		NEW Spc.CLS.PTR soundPTR
 
-	lda rendererPTR			;save pointer for irq usage
-	sta.w rendererIrqPTR
-	lda rendererPTR+2
-	sta.w rendererIrqPTR+2
+		lda rendererPTR			;save pointer for irq usage
+		sta.w rendererIrqPTR
+		lda rendererPTR+2
+		sta.w rendererIrqPTR+2
 	
-	CALL Sa1Iface.renderScene.MTD rendererPTR 0
+		CALL Sa1Iface.renderScene.MTD rendererPTR 0
+		CALL Spc.registerStimulusCallback.MTD soundPTR spcStimulusTrigger.CLB
 
-	CALL Spc.registerStimulusCallback.MTD soundPTR spcStimulusTrigger.CLB
 
-
-sep #$20
-lda #$ff								;just to be on the safe side
-sta.w ScreenBrightness
-lda #1
-sta.w MainScreen
-sta.w SubScreen
-rts
+	sep #$20
+	lda #INIDSP_BRIGHTNESS								;just to be on the safe side
+	sta.w ScreenBrightness
+	lda #T_BG1_ENABLE
+	sta.w MainScreen
+	sta.w SubScreen
+	rts
 
 ;msb clear= select scene, msb set=exec hdma effect(or create hdma object or whatever)
 ;the scene changer may not work as desired if frames are rendered too fast(not a problem on real hardware, but on snes9x, for example)
@@ -78,7 +72,6 @@ spcStimulusTrigger:
 	and #$7f
 	sta.w rendererScene
 	stz.w rendererFrame
-;	CALL Sa1Iface.renderScene.MTD rendererPTR
 
 	lda #$baad
 	rts
@@ -95,49 +88,40 @@ kill_Demo:
 	rts
 
 play_Demo:
-/*
-sep #$20
-nop
-nop
-nop	;adding nops here makes polys flash wildly. what gets overwritten where? reason was that framebuffer1/2 were sometimes swapped around in ramsection define
-;****
-nop
-*/
-rts
+	rts
 
 setupTilemap:
-php
-sep #$20
-lda #%10000000
-sta.l $002115	;vram port word access
-rep #$31	
-lda.w BG1TilemapVram
-and #$f0
-xba
-lsr a
-lda.w #$7000
-sta.l $002116
+	php
+	sep #$20
+	lda #VMAIN_INCREMENT_MODE
+	sta.l VMAIN		;vram port word access
+	rep #$31	
+	lda.w BG1TilemapVram
+	and #$f0
+	xba
+	lsr a
+	lda.w #$7000
+	sta.l VMADDL
 
-ldx #0	;h-count
-ldy #0	;v-count
+	ldx #0	;h-count
+	ldy #0	;v-count
 
-lda #1
-
+	lda #1
 	tilemapYloop:
-		tilemapXloop:
-		sta.l $002118
-		inc a
-		inx
-		cpx #frameResX
-		bcc tilemapXloop
+			tilemapXloop:
+			sta.l VMDATAL
+			inc a
+			inx
+			cpx #frameResX
+			bcc tilemapXloop
 	
-	ldx #0
-	iny
-	cpy #frameResY
-	bcc tilemapYloop
+		ldx #0
+		iny
+		cpy #frameResY
+		bcc tilemapYloop
 	
-plp
-rts
+	plp
+	rts
 
 
 UploadDebugPalette:
@@ -147,30 +131,29 @@ UploadDebugPalette:
 	lda #REGS
 	pha
 	plb
-	;transfer bright initial palette		
-	stz.w $2121			;upload frame palette
+						;transfer bright initial palette		
+	stz.w CGADD			;upload frame palette
 	rep #$31
 	lda.w #debugPal ;source
-	sta.w $4302
+	sta.w DMASRC0L
 	
 	sep #$20			
 	lda.b #:debugPal
-	sta.w $4304
+	sta.w DMASRC0B
 	rep #$31
 	
 	lda.w #debugPalEnd-debugPal ;length
-	sta.w $4305
+	sta.w DMALEN0L
 	sep #$20
 	lda.b #$00			;Set the DMA mode (byte, normal increment)
-	sta.w $4300       
-	lda.b #$22    			;Set the destination register ( $2122: CG-RAM Write )
-	sta.w $4301      
-	lda.b #$01    			;Initiate the DMA transfer
-	sta.w $420B
+	sta.w DMAP0       
+	lda.b #CGDATA & $ff    			;Set the destination register ( CGDATA: CG-RAM Write )
+	sta.w DMADEST0
+	lda.b #DMA_CHANNEL0_ENABLE    			;Initiate the DMA transfer
+	sta.w MDMAEN
 	plb
 	plp
 	rts
-
 
 .ends
 

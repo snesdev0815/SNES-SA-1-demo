@@ -17,13 +17,13 @@ NmiPrivVarsEnd ds 0
 GlobalVarsStrt ds 0
 
 SetIni	db
-W12SEL	db
-W1L	db
-W2L	db
-WBGLOG	db
-WMS	db
-WOBJSEL	db
-Mosaic	db
+window12Sel	db
+window1Left	db
+window2Left	db
+windowBGLogic	db
+windowMainscreen	db
+windowObjSel	db
+mosaicSetting	db
 ScreenMode db
 MainScreen db
 SubScreen db
@@ -33,15 +33,15 @@ BG1TilemapVram db
 BG2TilemapVram db
 BG3TilemapVram db
 BG4TilemapVram db
-CGWsel db
+colorAdditionSelect db
 CgadsubConfig db
 FixedColourB db
 FixedColourG db
 FixedColourR db
-BG1HOf dw
-BG1VOf dw
-BG2HOf dw
-BG2VOf dw
+xScrollBG1 dw
+yScrollBG1 dw
+xScrollBG2 dw
+yScrollBG2 dw
 ObjSel db
 
 HdmaFlags		db

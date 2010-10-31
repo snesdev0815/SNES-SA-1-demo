@@ -2,111 +2,109 @@
 .section "sa1interface"
 
 init_Sa1Iface:
-sep #$20
-lda #%00100000
-sta.l $002200		;reset sa1
-lda #%10100000
-sta.l $002202		;clear irqs to snes
-lda #$0
-sta.l $002220		;disable bankswitching banks $c0-$ff
-inc a
-sta.l $002221
-inc a
-sta.l $002222
-inc a
-sta.l $002223
-lda #0
-sta.l $002224		;swap in lowest bw-ram bank into $00-$3f:6000-$7fff
-sta.l $002228		;deprotect all bw-ram banks for snes
-lda #%10000000
-sta.l $002226		;snes bw-ram write enable
+	sep #$20
+	lda #CCNT_SA1_CPU_RESET
+	sta.l CCNT		;reset sa1
+	lda #SIC_CHARCONV_IRQ_CLEAR | SIC_SA1_IRQ_CLEAR
+	sta.l SIC		;clear irqs to snes
+	lda #0
+	sta.l CXB		;disable bankswitching banks $c0-$ff
+	inc a
+	sta.l DXB
+	inc a
+	sta.l EXB
+	inc a
+	sta.l FXB
+	lda #0
+	sta.l BMAPS		;swap in lowest bw-ram bank into $00-$3f:6000-$7fff
+	sta.l BWPA		;deprotect all bw-ram banks for snes
+	lda #SBWE_SNES_BWRAM_WRITE_ENABLE
+	sta.l SBWE		;snes bw-ram write enable
 
-lda #%11111111
-sta.l $002229	;write-enable all iram banks for snes.
-lda #%10000000	;#$81
-sta.l $002231	;end char conversion, 8bpp
-lda #%10100000
-sta.l $002202		;clear both irqs(shouldnt be se at reset, but whatever...)
-lda #%10100000
-sta.l $002201		;enable normal & char irq to snes
+	lda #%11111111
+	sta.l SIWP	;write-enable all iram banks for snes.
+	lda #CDMA_CHARCONV_END
+	sta.l CDMA	;end char conversion, 8bpp
+	lda #SIC_CHARCONV_IRQ_CLEAR | SIC_SA1_IRQ_CLEAR
+	sta.l SIC		;clear both irqs(shouldnt be se at reset, but whatever...)
+	lda #SIE_CPU_IRQ_ENABLE | SIE_CHARCONV_IRQ_ENABLE
+	sta.l SIE		;enable normal & char irq to snes
 
-rep #$31
-lda #(Sa1Boot-Sa1CodeStart)+IramCodeDummy	;set sa1 reset vector
-sta.l $002203
-lda #(Sa1EmptyHandler-Sa1CodeStart)+IramCodeDummy	;set sa1 nmi vector
-sta.l $002205
-sta.l $002207
+	rep #$31
+	lda #(Sa1Boot-Sa1CodeStart)+IramCodeDummy	;set sa1 reset vector
+	sta.l CRV
+	lda #(Sa1EmptyHandler-Sa1CodeStart)+IramCodeDummy	;set sa1 nmi vector
+	sta.l CNV
+	sta.l CIV
 
-lda #$ff
-jsr CheckBWramSize
-jsr ClearIram
-jsr SetupBWram
-jsr UploadSa1Code
+	lda #$ff
+	jsr CheckBWramSize
+	jsr ClearIram
+	jsr SetupBWram
+	jsr UploadSa1Code
 
-
-sep #$20
-lda #0
-sta.l cmdCommit
-lda #%00000000
-sta.l $002200		;start sa-1
-rts
+	sep #$20
+	lda #0
+	sta.l cmdCommit
+	lda #%00000000
+	sta.l CCNT		;start sa-1
+	rts
 
 ;uploads sa1 routines to iram, org 0. set irem write enable for snes cpu first!!
 UploadSa1Code:
-php
-sep #$20
-lda #:Sa1CodeStart	;source pointer
-sta _tmp+2
+	php
+	sep #$20
+	lda #:Sa1CodeStart	;source pointer
+	sta _tmp+2
 
-rep #$31
-lda #Sa1CodeStart
-sta _tmp
+	rep #$31
+	lda #Sa1CodeStart
+	sta _tmp
 
-ldy #0
-tyx
-
+	ldy #0
+	tyx
 
 UploadSa1CodeLoop:
-   lda [_tmp],y
-   sta.l IramCodeDummy,x
-   cmp.l IramCodeDummy,x
-   beq UploadSa1CodeOk
+	   lda [_tmp],y
+	   sta.l IramCodeDummy,x
+	   cmp.l IramCodeDummy,x
+	   beq UploadSa1CodeOk
 
-		pea E_Sa1IramCode						;print error if uploaded bytes dont match
-		jsr PrintException
-		stp
-   
-   UploadSa1CodeOk:
-   inx
-   inx
-   iny
-   iny
-   cpy #Sa1CodeEnd-Sa1CodeStart
-   bcc UploadSa1CodeLoop
-
-plp
-rts
+			pea E_Sa1IramCode						;print error if uploaded bytes dont match
+			jsr PrintException
+			stp
+  
+	UploadSa1CodeOk:
+		inx
+		inx
+		iny
+		iny
+		cpy #Sa1CodeEnd-Sa1CodeStart
+		bcc UploadSa1CodeLoop
+	plp
+	rts
 
 SetupBWram:
-php
-rep #$31
-lda #0
-tax
+	php
+	rep #$31
+	lda #0
+	tax
+
 	ClearBWramLoop:
-	sta.l frameBuff1,x
-	cmp.l frameBuff1,x
-	beq ClearBWramLoopOK
-		pea E_Sa1BWramClear						;print error if uploaded bytes dont match
-		jsr PrintException
-		stp
+		sta.l frameBuff1,x
+		cmp.l frameBuff1,x
+		beq ClearBWramLoopOK
+			pea E_Sa1BWramClear						;print error if uploaded bytes dont match
+			jsr PrintException
+			stp
 	
 	ClearBWramLoopOK:
-	inx
-	inx
-	cpx #framebuffsize
-	bcc ClearBWramLoop
-plp
-rts
+		inx
+		inx
+		cpx #framebuffsize
+		bcc ClearBWramLoop
+	plp
+	rts
 
 ;in: a,8bit, bytesize*$ff to check for
 CheckBWramSize:
@@ -174,29 +172,29 @@ ErrBwramTooSmall:
 	rts
 
 ClearIram:
-php
-rep #$31
-lda #0
-tax
+	php
+	rep #$31
+	lda #0
+	tax
+
 	ClearIramLoop:
-	sta.l SA1IRAM,x
-	cmp.l SA1IRAM,x
-	beq ClearIramLoopOK
-		pea E_Sa1IramClear						;print error if uploaded bytes dont match
-		jsr PrintException
-		stp
+		sta.l SA1IRAM,x
+		cmp.l SA1IRAM,x
+		beq ClearIramLoopOK
+			pea E_Sa1IramClear						;print error if uploaded bytes dont match
+			jsr PrintException
+			stp
 	
 	ClearIramLoopOK:
-	inx
-	inx
-	cpx #SA1IRAMLEN
-	bcc ClearIramLoop
-plp
-rts
+		inx
+		inx
+		cpx #SA1IRAMLEN
+		bcc ClearIramLoop
+	plp
+	rts
 
 play_Sa1Iface:
-rts
-
+	rts
 
 Sa1IrqNextFrame:
 	rep #$31
@@ -234,29 +232,22 @@ Sa1IrqNextFrame:
 			jsr PrintException
 			stp
 
-		SetupFrameIrqNoEnd:
-		sta 1,s
-		asl a
-		clc
-		adc 1,s
-		tax
-		lda.l DemoSceneLUT,x
-		tay
-		lda.l DemoSceneLUT+1,x
-		pha
-		plb
-		plb
-	
-		lda #0
-/*		
-		;pla
-		;rts
-		lda.l rendererScene
-		inc a
-		sta.l rendererScene
-		lda #0
-*/		
-	SetupFrameIrqNoOver:
+SetupFrameIrqNoEnd:
+	sta 1,s
+	asl a
+	clc
+	adc 1,s
+	tax
+	lda.l DemoSceneLUT,x
+	tay
+	lda.l DemoSceneLUT+1,x
+	pha
+	plb
+	plb
+
+	lda #0
+
+SetupFrameIrqNoOver:
 	sta 1,s
 	sta.l rendererFrame
 	asl a
@@ -289,29 +280,26 @@ Sa1IrqNextFrame:
 
 	lda 1,s		;lda.l retGfxPtr
 	and #%1111100000000000
-	sta.w $2232
+	sta.w SDA
 	
 	sep #$20
 	lda 3,s		;lda.l retGfxPtr+2
-	sta.w $2234	
-	lda #%00010100	;char conversion settings,8bpp,32 hor-tiles
-	sta.w $2231
+	sta.w SDA+2	
+	lda #CDMA_TILES_PER_ROW_32 | CDMA_8BPP	;char conversion settings,8bpp,32 hor-tiles
+	sta.w CDMA
 
 	stz.w charConvReady
 
-;	cli		;clear irq so that char-conv irq can be detected	
 	rep #$35
 	lda #IramCharConvBuff
-	sta.w $2235
+	sta.w DDA
 
 	sep #$20
-
 	ldx #0
 
 	Sa1IrqWaitCharConv:			;wait for charconv-ack-irq to happen
 		lda.w charConvReady
 		bne Sa1IrqCharConvReady
-			
 
 			inx
 			bne Sa1IrqWaitCharConv
@@ -324,95 +312,67 @@ Sa1IrqCharConvReady:
 
 
 IrqIrqWaitScanlineLoop:
-	stz.w $4201
-	and (0,s),y
-	lda #$80
-	sta.w $4201
-	and (0,s),y
-	lda.w $2137
-	lda.w $213f			;reset $213d to low byte
-	lda.w $213d			;get current scanline
-	cmp #((((28-frameResY)/2)+frameResY)*8)-1
-	bne IrqIrqWaitScanlineLoop
-		;cmp #((((28-frameResY)/2)+frameResY)*8)-1+10
-		;bcs IrqIrqWaitScanlineLoop
+		stz.w WRIO
+		and (0,s),y
+		lda #WRIO_JOY2_IOBIT_LATCH
+		sta.w WRIO
+		and (0,s),y
+		lda.w SLHV
+		lda.w STAT78			;reset OPVCT to low byte
+		lda.w OPVCT			;get current scanline
+		cmp #((((28-frameResY)/2)+frameResY)*8)-1
+		bne IrqIrqWaitScanlineLoop
 
-	lda #$80
-	sta.w $2100
+	lda #INIDSP_FORCE_BLANK
+	sta.w INIDSP
 	rep #$31
 	lda.w #0+(TILE8BPP/2)
-	sta.w $2116			;vram adress $0000
+	sta.w VMADDL			;vram adress $0000
 	lda.w #frameResX*frameResY*TILE8BPP
-	sta.w $4305
+	sta.w DMALEN0L
 	lda 1,s		;lda.l retGfxPtr
-	sta.w $4302			;Store the data offset into DMA source offset
+	sta.w DMASRC0L			;Store the data offset into DMA source offset
 	ora.l frameBuffHistory	;save adress so that we can see if erroneous transfers occured 
 	sta.l frameBuffHistory
 
 	sep #$20
 	lda 3,s		;lda.l retGfxPtr+2
-	sta.w $4304			;Store the data bank of the source data
+	sta.w DMASRC0B			;Store the data bank of the source data
 	ora.l frameBuffHistory+2
 	sta.l frameBuffHistory+2
-	lda.b #$80
-	sta.w $2115			;set VRAM transfer mode to word-access, increment by 1
-	lda.b #$01			;Set the DMA mode (word, normal increment)
-	sta.w $4300       
-	lda.b #$18    			;Set the destination register (VRAM gate)
-	sta.w $4301      
-	lda.b #$01    			;Initiate the DMA transfer
-	sta.w $420B
-
+	lda.b #VMAIN_INCREMENT_MODE
+	sta.w VMAIN			;set VRAM transfer mode to word-access, increment by 1
+	lda.b #DMAP_2_REG_WRITE_ONCE			;Set the DMA mode (word, normal increment)
+	sta.w DMAP0       
+	lda.b #VMDATAL & $ff    			;Set the destination register (VRAM gate)
+	sta.w DMADEST0
+	lda.b #DMA_CHANNEL0_ENABLE    			;Initiate the DMA transfer
+	sta.w MDMAEN
 
 	;transfer frame palette
 	rep #$31
 	lda 4,s		;lda.l retPalPtr ;source
-	sta.w $4302			
+	sta.w DMASRC0L
 	lda 5,s		;lda.l retPalPtr+1 
-	sta.w $4303
+	sta.w DMASRC0H
 	
 	lda 7,s	;	lda.l retPalLen ;length
-	sta.w $4305
+	sta.w DMALEN0L
 	sep #$20		
-	stz.w $2121			;upload frame palette
+	stz.w CGADD			;upload frame palette
 	lda.b #$00			;Set the DMA mode (byte, normal increment)
-	sta.w $4300       
-	lda.b #$22    			;Set the destination register ( $2122: CG-RAM Write )
-	sta.w $4301      
-	lda.b #$01    			;Initiate both DMA transfers
-	sta.w $420B
+	sta.w DMAP0       
+	lda.b #CGDATA & $ff    			;Set the destination register ( CGDATA: CG-RAM Write )
+	sta.w DMADEST0
+	lda.b #DMA_CHANNEL0_ENABLE    			;Initiate both DMA transfers
+	sta.w MDMAEN
 
-/*
-	;not working, why?
-	IrqWaitHBlank:
-		lda.l $004212
-		bvc IrqWaitHBlank
-*/
-
-	lda #$80		;tell sa1 transfer is complete
-	sta.l $002231
+	lda #CDMA_CHARCONV_END		;tell sa1 transfer is complete
+	sta.l CDMA
 
 	lda.l ScreenBrightness
-	and #$7f
-	sta.w $2100
-/*
-	;clear bw-ram framebuffer
-	rep #$31
-	lda.w #frameResX*frameResY*TILE8BPP
-	sta.w $4305
-	lda 1,s		;lda.l retGfxPtr
-	sta.w $4302			;Store the data offset into DMA source offset
-	sep #$20
-	lda 3,s		;lda.l retGfxPtr+2
-	sta.w $4304			;Store the data bank of the source data
-	lda.b #$80			;Set the DMA mode (single write, ppu->a-bus)
-	sta.w $4300       
-	lda.b #$34    			;Set the destination register (VRAM gate)
-	sta.w $4301      
-
-	lda.b #$01    			;Initiate the DMA transfer
-	sta.w $420B
-*/
+	and #INIDSP_FORCE_BLANK ~ $ff
+	sta.w INIDSP
 
 	lda #1			;committing frame after irq setup saves us from using irq busy flag
 	sta.l cmdCommit	
@@ -423,87 +383,36 @@ IrqIrqWaitScanlineLoop:
 	pla
 	pla
 	rts
-/*	
-	Sa1NextFrame:
-	php
-	sep #$20
-	stz.w charConvReady
 
-	rep #$31
-	inc.w rendererFrame
-	jsr SetupFramePtr
-
-	lda.l retGfxPtr
-	and #%1111100000000000
-	sta.l $002232
-	
-	sep #$20
-	lda.l retGfxPtr+2
-	sta.l $002234	
-	lda #%00010100	;char conversion settings,8bpp,32 hor-tiles
-	sta.l $002231
-	
-	rep #$31
-	cli		;clear irq so that char-conv irq can be detected
-	lda #IramCharConvBuff
-	sta.l $002235
-
-	sep #$20
-	ldx #0
-	Sa1PlayWaitCharConvIrq:			;wait for charconv-ack-irq to happen
-		nop
-		nop
-		nop
-		nop
-		inx
-		bne WaitCharConvNoOver
-			pea E_Sa1NoIrq						;print error if no irq occurs for some time
-			jsr PrintException
-			stp
-
-		WaitCharConvNoOver:
-		lda.w charConvReady
-		beq Sa1PlayWaitCharConvIrq
-	
-	jsr Sa1DmaFrameToVram
-	plp
-	rts
-;FrameWaitNotDone:
-;rts
-
-rts
-*/
 kill_Sa1Iface:
-rts
+	rts
 
 ;appearently, both normal irq and charconv irq flags are set at the same time on real hardware. why?
 ;emu:530 frm-irqs, 530 char-irqs, total a61 irqs (diff=1)
 ;real: 530 frm-irqs, 530 char-irqs, total 8c7 irqs (diff=199)
 Sa1IrqHandler:
-.ACCU 8
-.INDEX 16
-;	php
-;	sep #$20
+	.ACCU 8
+	.INDEX 16
 
-	lda.l $002301
+	lda.l CFR
 	sta.w Sa1IrqFlags
-	lda.l $002300
+	lda.l SFR
 	sta.w SnesIrqFlags
-	sta.l $002202		;clear sa1 irqs to snes. else, irq line would stay set all the time
-	and #%10100000
-	cmp #%10100000
+	sta.l SIC		;clear sa1 irqs to snes. else, irq line would stay set all the time
+	and # SIE_CHARCONV_IRQ_ENABLE | SIE_CPU_IRQ_ENABLE
+	cmp # SIE_CHARCONV_IRQ_ENABLE | SIE_CPU_IRQ_ENABLE
 	bne Sa1NoDoubleIrq
 		pea E_Sa1DoubleIrq	;2 different irqs should never occur at the same time
 		jsr PrintException
 		stp
 		
 
-	Sa1NoDoubleIrq:
+Sa1NoDoubleIrq:
 	lda #0
 	sta.l irqCheckpoint
 
 	lda.w SnesIrqFlags
-	bit #%100000
+	bit # SIE_CHARCONV_IRQ_ENABLE
 	beq Sa1NoCharConvTransfer
 
 		lda #1
@@ -518,9 +427,8 @@ Sa1IrqHandler:
 
 		clc
 		rts
-
 		
-	Sa1NoCharConvTransfer:
+Sa1NoCharConvTransfer:
 	sep #$20
 	lda.w SnesIrqFlags
 	bpl Sa1NoNormalIrq
@@ -538,18 +446,18 @@ Sa1IrqHandler:
 		clc
 		rts
 
-	Sa1NoNormalIrq:
+Sa1NoNormalIrq:
 	clc
 	sec	;unhandled irq
 	rts
 
 renderScene:
-rep #$31
-and.w #$ff
-sta.w rendererScene
-stz.w rendererFrame
-jsr SetupFramePtr
-rts
+	rep #$31
+	and.w #$ff
+	sta.w rendererScene
+	stz.w rendererFrame
+	jsr SetupFramePtr
+	rts
 
 SetupFramePtr:
 	php
@@ -574,18 +482,8 @@ SetupFramePtr:
 	bcc SetupFrameNoOver
 		plp	;scene complete
 		rts
-/*
-		inc currScene
-		lda currScene
-		cmp.w #sceneNumber
-		bcc SetupSceneNoOver
-			stz currScene
-		SetupSceneNoOver:
-		lda.w #0
-		sta currFrm
-		bra SetupFramePtrRpt
-*/
-	SetupFrameNoOver:
+
+SetupFrameNoOver:
 	sta _tmp+3
 	sta.w rendererFrame
 	asl a
@@ -605,110 +503,6 @@ SetupFramePtr:
 	sta.l cmdCommit	
 	plp
 	rts
-/*
-Sa1DmaFrameToVram:
-		php
-		phb
-		sep #$20
-		lda #REGS
-		pha
-		plb
-		lda #((((28-frameResY)/2)+frameResY)*8)-1
-		jsr IrqWaitScanline
-		lda #$80
-		sta.w $2100
-		rep #$31
-		lda.w #0+(TILE8BPP/2)
-		sta.w $2116			;vram adress $0000
-		lda.w #frameResX*frameResY*TILE8BPP
-		sta.w $4305
-		lda.l retGfxPtr
-		sta.w $4302			;Store the data offset into DMA source offset
-		lda.l retPalPtr ;source
-		sta.w $4312			
-		lda.l retPalPtr+1 
-		sta.w $4313
-		
-		lda.l retPalLen ;length
-		sta.w $4315
-
-		sep #$20
-		lda.l retGfxPtr+2
-		sta.w $4304			;Store the data bank of the source data
-		lda.b #$80
-		sta.w $2115			;set VRAM transfer mode to word-access, increment by 1
-		lda.b #$01			;Set the DMA mode (word, normal increment)
-		sta.w $4300       
-		lda.b #$18    			;Set the destination register (VRAM gate)
-		sta.w $4301      
-;		lda.b #$01    			;Initiate the DMA transfer
-;		sta.w $420B
-
-		;transfer frame palette		
-		stz.w $2121			;upload frame palette
-		lda.b #$00			;Set the DMA mode (byte, normal increment)
-		sta.w $4310       
-		lda.b #$22    			;Set the destination register ( $2122: CG-RAM Write )
-		sta.w $4311      
-		lda.b #$03    			;Initiate both DMA transfers
-		sta.w $420B
-
-		lda #$80		;tell sa1 transfer is complete
-		sta.l $002231
-
-		lda.l ScreenBrightness
-		and #$7f
-		sta.w $2100
-
-		;clear bw-ram framebuffer
-		rep #$31
-		lda.w #frameResX*frameResY*TILE8BPP
-		sta.w $4305
-		lda.l retGfxPtr
-		sta.w $4302			;Store the data offset into DMA source offset
-		sep #$20
-		lda.l retGfxPtr+2
-		sta.w $4304			;Store the data bank of the source data
-		lda.b #$80			;Set the DMA mode (single write, ppu->a-bus)
-		sta.w $4300       
-		lda.b #$34    			;Set the destination register (VRAM gate)
-		sta.w $4301      
-		lda.b #$01    			;Initiate the DMA transfer
-		sta.w $420B
-
-		plb
-		plp
-		rts
-
-IrqWaitScanline:
-	php
-	sep #$20
-	sta.l FrameClipStart
-	clc
-	adc #10
-	sta.l FrameClipEnd
-IrqWaitScanlineLoop:
-	stz.w $4201
-	nop
-	nop
-	nop
-	nop
-	lda #$80
-	sta.w $4201
-	nop
-	nop
-	nop
-	nop
-	lda.w $2137
-	lda.w $213f			;reset $213d to low byte
-	lda.w $213d			;get current scanline
-	cmp.l FrameClipStart
-	bcc IrqWaitScanlineLoop
-	cmp.l FrameClipEnd
-	bcs IrqWaitScanlineLoop
-	plp
-	rts
-*/
 
 .ends
 
@@ -716,238 +510,191 @@ IrqWaitScanlineLoop:
 .section "sa1 code in iram" align 2
 Sa1CodeStart:
 Sa1Boot:
-SEI		;switch to native mode
-CLC
-XCE
-rep #$31
-lda #sa1Stack-1
-tcs
-lda #sa1IramDp
-tcd
-sep #$20
-lda #REGS
-pha
-plb
-lda #1
-sta.l sa1CP
-lda #0
-sta.l $002209	;disable snes irq,snes irq/nmi vector from rom
-sta.l $00220a	;mask off sa1 irqs
-lda #%11110000
-sta.l $00220b	;clear all sa1 irqs
-lda #0
-sta.l $002210	;disable sa1 timers
-sta.l $002225
-lda #%10000000
-sta.l $002227	;sa1 bwram write enable
-lda #%11111111
-sta.l $00222a	;write-enable all iram banks for sa1. is this correct??
-lda #0
-sta.l $002230	;disable sa1 dma
+	sei		;switch to native mode
+	clc
+	xce
+	rep #$31
+	lda #sa1Stack-1
+	tcs
+	lda #sa1IramDp
+	tcd
+	sep #$20
+	lda #REGS
+	pha
+	plb
+	lda #0
+	sta.l SCNT	;disable snes irq,snes irq/nmi vector from rom
+	sta.l CIE	;mask off sa1 irqs
+	lda #CIC_IRQ_SNES2SA1_CLEAR | CIC_IRQ_TIMER2SA1_CLEAR | CIC_IRQ_DMA2SA1_CLEAR | CIC_NMI_SNES2SA1_CLEAR
+	sta.l CIC	;clear all sa1 irqs
+	lda #0
+	sta.l TMC	;disable sa1 timers
+	sta.l BMAP
+	lda #CBWE_SA1_BWRAM_WRITE_ENABLE
+	sta.l CBWE	;sa1 bwram write enable
+	lda #%11111111
+	sta.l CIWP	;write-enable all iram banks for sa1. is this correct??
+	lda #0
+	sta.l DCNT	;disable sa1 dma
 
-lda #$0
-sta.l $00223f	;4bpp mode
+	lda #$0
+	sta.l BBF	;4bpp mode
 
-;sta.l $002231	;char conversion 
-lda #%00000010
-sta.l $002250	;clear cumul sum
+	lda #MCNT_CUMULATIVE_SUM
+	sta.l MCNT	;clear cumul sum
 
-lda #BWRAM
-sta.w currFrameBuff+2
-rep #$31
-lda #0	;frameBuff1
-sta.w currFrameBuff
-sep #$20
+	lda #BWRAM
+	sta.w currFrameBuff+2
+	rep #$31
+	lda #0	;frameBuff1
+	sta.w currFrameBuff
+	sep #$20
 
-lda #2
-sta.w sa1CP
 Sa1WaitFrame:
-	lda #5
-	sta.l frameBuff1+(frameResX*frameResY*TILE8BPP)
-	lda.w cmdCommit
-	beq Sa1WaitFrame
+		lda #5
+		sta.l frameBuff1+(frameResX*frameResY*TILE8BPP)
+		lda.w cmdCommit
+		beq Sa1WaitFrame
 
-lda #3
-sta.w sa1CP
-lda #0					;clear commit, wait for next frame
-sta.w cmdCommit
+	lda #0					;clear commit, wait for next frame
+	sta.w cmdCommit
 
-rep #$31
-lda.w cmdFrame+1
-sta.w retPalPtrBuff+1
-sta sa1tmp+1
+	rep #$31
+	lda.w cmdFrame+1
+	sta.w retPalPtrBuff+1
+	sta sa1tmp+1
 
-lda.w cmdFrame
-sta sa1tmp
-inc a									;skip pal-length byte
-sta.w retPalPtrBuff
-ldy #0					;get pal-length
-lda [sa1tmp],y
-and #$ff
-asl a
-sta.w retPalLenBuff
+	lda.w cmdFrame
+	sta sa1tmp
+	inc a									;skip pal-length byte
+	sta.w retPalPtrBuff
+	ldy #0					;get pal-length
+	lda [sa1tmp],y
+	and #$ff
+	asl a
+	sta.w retPalLenBuff
 
-inc a
-clc							;update pointer, point to polycount
-adc sa1tmp
-sta sa1tmp
-lda [sa1tmp],y
-sta polyNum
-inc sa1tmp		;move pointer to polys
-inc sa1tmp
+	inc a
+	clc							;update pointer, point to polycount
+	adc sa1tmp
+	sta sa1tmp
+	lda [sa1tmp],y
+	sta polyNum
+	inc sa1tmp		;move pointer to polys
+	inc sa1tmp
 
-sep #$20
-stz.w $2301		;clear dma flag (and all irq msgs from snes)
-lda #%10000100	;dma-clear bw-ram framebuffer
-sta.l $002230
+	sep #$20
+	stz.w CFR		;clear dma flag (and all irq msgs from snes)
+	lda #DCNT_DMA_ENABLE | DCNT_DMA_DESTINATION | DCNT_DMA_SOURCE_ROM		;dma-clear bw-ram framebuffer
+	sta.l DCNT
 
-rep #$31
-lda #FrameBufferClearer
-sta.l $002232
-sep #$20
-lda #:FrameBufferClearer	;source
-sta.l $002234
-rep #$31
+	rep #$31
+	lda #FrameBufferClearer
+	sta.l SDA
 
+	sep #$20
+	lda #:FrameBufferClearer	;source
+	sta.l SDA+2
 
-lda #frameResX*frameResY*TILE8BPP	;length
-sta.l $002238
+	rep #$31
+	lda #frameResX*frameResY*TILE8BPP	;length
+	sta.l DTC
 
-lda.w currFrameBuff
-sta.l $002235
+	lda.w currFrameBuff
+	sta.l DDA
 
-sep #$20
-lda.w currFrameBuff+2
-sta.l $002237
-
-lda #4
-sta.l sa1CP
+	sep #$20
+	lda.w currFrameBuff+2
+	sta.l DDA+2
 
 ;copy polys to iram buffer while bw-ram framebuffer is being cleared
-rep #$31
-
-ldy #0
-lda sa1tmp
-sta polyPtr
-lda sa1tmp+1
-sta polyPtr+1
-/*
-;it seems snes9x does transfers instantly. also, according to the official docs, it seems that the sa1 cpu keeps on running while transfers happen.
-sep #$20
-sa1BwRamFrmBuffClrDmaWait:
-	lda.l $002301
-	bit #%100000
-	beq sa1BwRamFrmBuffClrDmaWait
-*/
-;draw pixels. later:draw polys
-rep #$31
-ldy #0
-lda polyNum
-stz sa1tmp+2
-;and.w #$7f		;128 polys max per frame
-tax
-	IramDrawPixelLoop:
 	rep #$31
-	lda [polyPtr],y	;get poly data from rom, no use copying to iram first
-	sta col
-	iny
-	lda [polyPtr],y
-	sta poly.1.x
-	iny
-	iny
-	lda [polyPtr],y
-	sta poly.2.x
-	iny
-	iny
-	lda [polyPtr],y
-	sta poly.3.x
-	iny
-	iny
-	phy
-;	php
-	jsr Sa1DrawPoly-Sa1CodeStart+IramCodeDummy
-	;jsr Sa1DrawVertices-Sa1CodeStart+IramCodeDummy
-;	plp
-	ply
+	ldy #0
+	lda sa1tmp
+	sta polyPtr
+	lda sa1tmp+1
+	sta polyPtr+1
+;draw pixels. later:draw polys
+	rep #$31
+	ldy #0
 	lda polyNum
-	lda sa1tmp+2
-	inc a
-	sta sa1tmp+2
-	cmp polyNum
-	bcc IramDrawPixelLoop
+	stz sa1tmp+2
+	tax
 
+	IramDrawPixelLoop:
+		rep #$31
+		lda [polyPtr],y	;get poly data from rom, no use copying to iram first
+		sta col
+		iny
+		lda [polyPtr],y
+		sta poly.1.x
+		iny
+		iny
+		lda [polyPtr],y
+		sta poly.2.x
+		iny
+		iny
+		lda [polyPtr],y
+		sta poly.3.x
+		iny
+		iny
+		phy
+		jsr Sa1DrawPoly-Sa1CodeStart+IramCodeDummy
+		ply
+		lda polyNum
+		lda sa1tmp+2
+		inc a
+		sta sa1tmp+2
+		cmp polyNum
+		bcc IramDrawPixelLoop
 
-rep #$31
-lda.w retPalLenBuff
-sta.w retPalLen
-lda.w retPalPtrBuff
-sta.w retPalPtr
-lda.w retPalPtrBuff+1
-sta.w retPalPtr+1
+	rep #$31
+	lda.w retPalLenBuff
+	sta.w retPalLen
+	lda.w retPalPtrBuff
+	sta.w retPalPtr
+	lda.w retPalPtrBuff+1
+	sta.w retPalPtr+1
 
-lda.w currFrameBuff
-sta.w retGfxPtr
-lda.w currFrameBuff+1
-sta.w retGfxPtr+1
+	lda.w currFrameBuff
+	sta.w retGfxPtr
+	lda.w currFrameBuff+1
+	sta.w retGfxPtr+1
 
-/*
-lda.w currFrameBuff
-eor.w #framebuffsize ;#frameBuff2
-sta.w currFrameBuff
-*/
-sep #$20
+	sep #$20
+	lda # SCNT_SNES_CPU_IRQ			;trigger irq sa1->snes.
+	sta.l SCNT
 
-lda #4
-sta.w sa1CP
+	lda #DCNT_DMA_ENABLE | DCNT_PRIORITY | DCNT_DMA_MODE | DCNT_CHARCONV_MODE | DCNT_DMA_DESTINATION | DCNT_DMA_SOURCE_BWRAM	;set dma mode to bw-ram->i-ram char1 conversion
+	sta.l DCNT
 
-lda #5
-sta.w sa1CP
-
-lda #$80			;trigger irq sa1->snes.
-sta.l $002209
-
-lda #6
-sta.w sa1CP
-
-lda.b #%11110101				;set dma mode to bw-ram->i-ram char1 conversion
-sta.l $002230
-
-lda #7
-sta.w sa1CP
-
-
-brl Sa1WaitFrame
-
-
-
+	brl Sa1WaitFrame
 
 Sa1EmptyHandler:
-rti
+	rti
 
 Sa1DrawLine:
 	sep #$20
 	lda zpB.march
 	bmi Sa1DrawLineLeftMarchYLoop
 	;march X
-	Sa1DrawLineLeftMarchXLoop:
+Sa1DrawLineLeftMarchXLoop:
 	lda zpB.dir
 	bmi Sa1DrawLineLeftDirRight
 		dec zpB.posx					;go left
-		;dec zpB.posx
 		bra Sa1DrawLineLeftDirLeft
 
-	Sa1DrawLineLeftDirRight:
+Sa1DrawLineLeftDirRight:
 	inc zpB.posx
-	Sa1DrawLineLeftDirLeft:
-;		lda zpB.dx			;debug, check overflow
-;		lda zpB.countr
+Sa1DrawLineLeftDirLeft:
 		lda zpB.dy
 		clc
 		adc zpB.countr					;increment y-div-counter.
 		bcs Sa1DrawLineLeftOverflow
 		cmp zpB.dx 
 		bcc Sa1DrawLineLeftNoOver
-			Sa1DrawLineLeftOverflow:
+
+		Sa1DrawLineLeftOverflow:
 			inc zpB.posy					;always march down
 			sec									;update y-div-counter with remainder
 			sbc zpB.dx
@@ -957,14 +704,13 @@ Sa1DrawLine:
 			beq Sa1DrawLineLeftDone	;done if target point reached
 			
 			rep #$31
-			;clc
 			rts
 
-		Sa1DrawLineLeftNoOver:
+	Sa1DrawLineLeftNoOver:
 		sta zpB.countr					;loop until next y-step
 		bra Sa1DrawLineLeftMarchXLoop
 
-	Sa1DrawLineLeftDone:
+Sa1DrawLineLeftDone:
 	inc zpB.posy
 	rep #$31
 	sec
@@ -976,37 +722,35 @@ Sa1DrawLineLeftMarchYLoop:
 	cmp zpB.endy
 	beq Sa1DrawLineLeftDone	;done if target point reached
 
-
 		lda zpB.dx
 		clc
 		adc zpB.countr					;increment y-div-counter.
 		bcs Sa1DrawLineLeftYOverflow
 		cmp zpB.dy 
 		bcc Sa1DrawLineLeftYNoOver
-			Sa1DrawLineLeftYOverflow:
+
+		Sa1DrawLineLeftYOverflow:
 			sec									;update y-div-counter with remainder
 			sbc zpB.dy
 			sta zpB.countr
 			lda zpB.dir
 			bmi Sa1DrawLineLeftYDirRight
 				dec zpB.posx					;go left
-				;dec zpB.posx
 				bra Sa1DrawLineLeftYDirLeft
-			Sa1DrawLineLeftYDirRight:
+		Sa1DrawLineLeftYDirRight:
 			inc zpB.posx
-			Sa1DrawLineLeftYDirLeft:
+		Sa1DrawLineLeftYDirLeft:
 			rep #$31
-			;clc
 			rts
 
-		Sa1DrawLineLeftYNoOver:
+	Sa1DrawLineLeftYNoOver:
 		sta zpB.countr					;loop until next y-step
 		rep #$31
-		;clc
+
 		rts
 
-		SkipPolyTop:
-	SkipPoly:
+SkipPolyTop:
+SkipPoly:
 	pld
 	rts
 
@@ -1025,187 +769,159 @@ comparing 2.x and 3.x yields which of the two forms the left and which forms the
 	lda poly.1.y
 	cmp	poly.3.y
 	beq SkipPoly	;skip poly if height=0
-				rep #$31
-				lda.w #re+sa1IramDp
-				sta.w first.lin
-				lda.w #le+sa1IramDp
-				sta.w second.lin
 
-		;jsr PolyRenderExec-Sa1CodeStart+IramCodeDummy
-				sep #$20
-				stz polyTopBot
-				lda poly.2.y
-				cmp poly.3.y
-				bne PolyRenderDontSkipLast
-					inc poly.3.y
-				PolyRenderDontSkipLast:
-				cmp poly.1.y
-				bne PolyRenderDontSkipFirst
+		rep #$31
+		lda.w #re+sa1IramDp
+		sta.w first.lin
+		lda.w #le+sa1IramDp
+		sta.w second.lin
 
-					dec poly.1.y	;hack, might cause problems
-				PolyRenderDontSkipFirst:
-				rep #$31
-				lda poly.1.x
-				sta.w sourceVert
-				lda poly.2.x
-				sta.w targetVert
-				
-				PolyRenderSkipFirst:
-				lda.w first.lin	;#le+sa1IramDp
-				tcd
-				jsr Sa1SetupLine-Sa1CodeStart+IramCodeDummy
+		sep #$20
+		stz polyTopBot
+		lda poly.2.y
+		cmp poly.3.y
+		bne PolyRenderDontSkipLast
+			inc poly.3.y
 
-				lda.w #sa1IramDp
-				tcd
-				lda poly.1.x
-				sta.w sourceVert
-				lda poly.3.x
-				sta.w targetVert
-				lda.w second.lin ;#re+sa1IramDp
-				tcd
-				jsr Sa1SetupLine-Sa1CodeStart+IramCodeDummy
+	PolyRenderDontSkipLast:
+		cmp poly.1.y
+		bne PolyRenderDontSkipFirst
+			dec poly.1.y	;hack, might cause problems
 
-				PolyTop2LeftMarchY:
-				rep #$31
-				lda.w first.lin	; #le+sa1IramDp
-				tcd
-				jsr Sa1DrawLine-Sa1CodeStart+IramCodeDummy
-				bcc PolyTop2LeftDontFetchNextVert
-
-					;setup second poly part or exit
-					;rep #$31
-					lda.w #sa1IramDp
-					tcd
-					lda polyTopBot	;done rendering poly?
-					and #$ff
-					bne PolyRenderLeftDone
-										
-					;rep #$31				
-					inc polyTopBot
-					lda poly.2.x
-					sta.w sourceVert
-					lda poly.3.x
-					sta.w targetVert
-					lda.w first.lin ; #le+sa1IramDp
-					tcd
-					jsr Sa1SetupLine-Sa1CodeStart+IramCodeDummy
-
-				PolyTop2LeftDontFetchNextVert:
-				lda.w second.lin ;#re+sa1IramDp
-				tcd
-				jsr Sa1DrawLine-Sa1CodeStart+IramCodeDummy
-
-	;			rep #$31			;this isn't correct because posx/y isnt initialized yet for first round. only debug, anyway
-				pea sa1IramDp
-				pld
-
-				sep #$20
-				ldx re.posx
-				lda le.posx
-				sec
-				sbc re.posx
-				beq PolyTop2LeftMarchY
-				bcs DrawSpanFastRev
-					ldx le.posx
-					lda re.posx
-					sec
-					sbc le.posx
-
-				DrawSpanFastRev:
-				rep #$31
-				and #$ff
-				inc a
-				cmp #$ff
-				bcc DrawSpanNoXMax
-					lda #$ff
-				DrawSpanNoXMax:
-;				inc a
-
-				tay
-
-				DrawSpanNoDmaWait:
-
-				lda.w $2301	;check dma end	;don't do dma fill if last one didn't finish yet
-				bit #%100000
-				beq DrawSpanNoDma
-				
-			;	lda.w $2230		;check snes dma end flag
-			;	bpl DrawSpanNoDmaWait
-
-					sep #$20
-					stz.w $2301		;clear dma flag (and all irq msgs from snes)				
-					rep #$31
-					sty.w $2238
-					lda #%10000100	;dma-clear bw-ram framebuffer
-					sta.w $2230
-					
-					;lda #0
-					lda col-1
-					;lda #$ffff	;debug
-					and #$ff00
-					sta.w $2232
-					stx.w $2235
-	;				pla
-					
-					;lda #frameBuff1
-;					txa
-;					clc
-;					sec
-;					adc.w currFrameBuff
-;					sta.w $2235
-					
-					sep #$20
-					lda #:DmaFillSrc	;source
-					sta.w $2234
-	
-					lda.w currFrameBuff+2
-					sta.w $2237
-					brl PolyTop2LeftMarchY
-					;rep #$31
-
-				DrawSpanNoDma:
-
-				.ACCU 16
-				tya
-
-				eor #$ff
-				inc a
-				sta fillBuff
-				asl a
-				clc
-				adc fillBuff
-				clc
-				adc.w #FastFiller-Sa1CodeStart+IramCodeDummy
-				sta.w FastFiller-Sa1CodeStart+IramCodeDummy+1
-;				txa
-;				clc
-;				adc.w currFrameBuff
-;				tax
-				sep #$20
-				phb
-				lda #BWRAM
-				pha
-				plb
-				lda col
-;				brl PolyTop2LeftMarchY	;loop till line has been drawn
-				inc a
-				;lda #$ff
-			FastFiller:
-				jmp	0
-			
-				.rept 256 
-				FILLMACRO
-				.endr
-			
-				plb
-				brl PolyTop2LeftMarchY	;loop till line has been drawn
-
+	PolyRenderDontSkipFirst:
+		rep #$31
+		lda poly.1.x
+		sta.w sourceVert
+		lda poly.2.x
+		sta.w targetVert
 		
+	PolyRenderSkipFirst:
+		lda.w first.lin	;#le+sa1IramDp
+		tcd
+		jsr Sa1SetupLine-Sa1CodeStart+IramCodeDummy
 
+		lda.w #sa1IramDp
+		tcd
+		lda poly.1.x
+		sta.w sourceVert
+		lda poly.3.x
+		sta.w targetVert
+		lda.w second.lin ;#re+sa1IramDp
+		tcd
+		jsr Sa1SetupLine-Sa1CodeStart+IramCodeDummy
 
+	PolyTop2LeftMarchY:
+		rep #$31
+		lda.w first.lin	; #le+sa1IramDp
+		tcd
+		jsr Sa1DrawLine-Sa1CodeStart+IramCodeDummy
+		bcc PolyTop2LeftDontFetchNextVert
 
-Sa1DrawVertices:
+			;setup second poly part or exit
+			lda.w #sa1IramDp
+			tcd
+			lda polyTopBot	;done rendering poly?
+			and #$ff
+			bne PolyRenderLeftDone
+								
+			inc polyTopBot
+			lda poly.2.x
+			sta.w sourceVert
+			lda poly.3.x
+			sta.w targetVert
+			lda.w first.lin ; #le+sa1IramDp
+			tcd
+			jsr Sa1SetupLine-Sa1CodeStart+IramCodeDummy
+
+	PolyTop2LeftDontFetchNextVert:
+		lda.w second.lin ;#re+sa1IramDp
+		tcd
+		jsr Sa1DrawLine-Sa1CodeStart+IramCodeDummy
+
+		pea sa1IramDp
+		pld
+
+		sep #$20
+		ldx re.posx
+		lda le.posx
+		sec
+		sbc re.posx
+		beq PolyTop2LeftMarchY
+		bcs DrawSpanFastRev
+			ldx le.posx
+			lda re.posx
+			sec
+			sbc le.posx
+
+	DrawSpanFastRev:
+		rep #$31
+		and #$ff
+		inc a
+		cmp #$ff
+		bcc DrawSpanNoXMax
+			lda #$ff
+	DrawSpanNoXMax:
+		tay
+
+	DrawSpanNoDmaWait:
+		lda.w CFR	;check dma end	;don't do dma fill if last one didn't finish yet
+		bit #CFR_IRQ_END
+		beq DrawSpanNoDma
+		
+			sep #$20
+			stz.w CFR		;clear dma flag (and all irq msgs from snes)				
+			rep #$31
+			sty.w DTC
+			lda #DCNT_DMA_ENABLE | DCNT_DMA_DESTINATION	;dma-clear bw-ram framebuffer
+			sta.w DCNT
+			
+			lda col-1
+			and #$ff00
+			sta.w SDA
+			stx.w DDA
+			
+			sep #$20
+			lda #:DmaFillSrc	;source
+			sta.w SDA+2
+
+			lda.w currFrameBuff+2
+			sta.w DDA+2
+			brl PolyTop2LeftMarchY
+
+	DrawSpanNoDma:
+		.ACCU 16
+		tya
+
+		eor #$ff
+		inc a
+		sta fillBuff
+		asl a
+		clc
+		adc fillBuff
+		clc
+		adc.w #FastFiller-Sa1CodeStart+IramCodeDummy
+		sta.w FastFiller-Sa1CodeStart+IramCodeDummy+1
+
+		sep #$20
+		phb
+		lda #BWRAM
+		pha
+		plb
+		lda col
+
+		inc a
+
+	FastFiller:
+		jmp	0
+		.rept 256 
+		FILLMACRO
+		.endr
+	
+		plb
+		brl PolyTop2LeftMarchY	;loop till line has been drawn
+
 ;draw vertex pixels:
+Sa1DrawVertices:
 	rep #$31
 	sep #$20
 	lda #$ff	
@@ -1230,7 +946,6 @@ Sa1SetupLine:
 	lda.w targetVert.y
 	sec
 	sbc.w sourceVert.y
-;	sta zpB.dy
 	lsr a
 	sta zpB.countr			
 	rep #$31
@@ -1248,7 +963,8 @@ Sa1SetupLine:
 		lda.w sourceVert.x
 		sec
 		sbc.w targetVert.x
-	Sa1SetupLineDxOk:
+
+Sa1SetupLineDxOk:
 	sta zpB.dx
 	
 	lda.w targetVert.y
@@ -1262,27 +978,28 @@ Sa1SetupLine:
 		lsr a
 		sta zpB.countr
 
-	Sa1SetupLineMarchY:
+Sa1SetupLineMarchY:
 	rep #$31
 	rts
 
 Sa1CodeEnd:
+
 .ends
 
 
 ;a waste of memory, but since sa1 normal dma has no fixed mode, this is the fastest way to clear bw-ram
 .section "frame buffer clearer" superfree
 FrameBufferClearer:
-.rept $8000
-.db 0
-.endr
+	.rept $8000
+		.db 0
+	.endr
 .ends
 
 ;dma polyfill source. needed because no fixed dma mode available on sa1
 .section "dma fill src" superfree
 DmaFillSrc:
-.rept 256
-	DMAFILL
-.endr
+	.rept 256
+		DMAFILL
+	.endr
 .ends
 

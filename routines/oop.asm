@@ -105,198 +105,171 @@ should carry return of dispatched method be forwarded to caller?
 
 ;clear oop stack
 OopHandlerInit:
-php
-phd
-rep #$31
-lda #ZP
-tcd
-lda #0
-ldy #OopStackEnd-OopStack
-ldx #OopStack
-jsr ClearWRAM
+	php
+	phd
+	rep #$31
+	lda #ZP
+	tcd
+	lda #0
+	ldy #OopStackEnd-OopStack
+	ldx #OopStack
+	jsr ClearWRAM
 
-lda #oopStackTst
-sta.w STACK_strt
-sta.w STACK_end
-stz OopObjSlotPtr
-stz OopObjRamPtr
+	lda #oopStackTst
+	sta.w STACK_strt
+	sta.w STACK_end
+	stz OopObjSlotPtr
+	stz OopObjRamPtr
 
-jsr initUndefStrs
-pld
-plp
-rts
+	jsr initUndefStrs
+	pld
+	plp
+	rts
 
 ;in:a=number of object to create, y:call parameter
 createOopObj:
-php
-phd
-rep #$31
-;phx
-/*pha
-lda #ZP
-tcd
-pla*/
+	php
+	phd
+	rep #$31
 
-pha
-tdc
+	pha
+	tdc
 
-pea ZP
-pld
+	pea ZP
+	pld
 
-;map zp-adress to full ram adress.(this means supplied direct,full adresses can't be lower than $100)
-sta tmp
-txa
-cmp #$ff
-bcs createObjNoZP
+	;map zp-adress to full ram adress.(this means supplied direct,full adresses can't be lower than $100)
+	sta tmp
+	txa
+	cmp #$ff
+	bcs createObjNoZP
 
-	clc		;add direct page pointer if supplied hash pointer is <$ff(=zp)
-	adc tmp
-	tax
+		clc		;add direct page pointer if supplied hash pointer is <$ff(=zp)
+		adc tmp
+		tax
 createObjNoZP:
-stx tmp+6
-pla	
+	stx tmp+6
+	pla	
 
+	jsr OopObjFetchPointer
+	sty tmp+11
 
-jsr OopObjFetchPointer
-sty tmp+11
-;pla
-;sta tmp+6	;return pointer reference
-
-ldy #OOPR.flags	;singleton?
-lda [tmp+1],y
-lsr a
-bcc createOopObjNoSingleton
-	ldx #0
-	ldy #OOPR.id
+	ldy #OOPR.flags	;singleton?
 	lda [tmp+1],y
-	jsr OopSeekObjId
+	lsr a
 	bcc createOopObjNoSingleton
+		ldx #0
+		ldy #OOPR.id
+		lda [tmp+1],y
+		jsr OopSeekObjId
+		bcc createOopObjNoSingleton
 
-		lda.l OopStack.id,x
-		sta tmp+8	;save class id
-		lda.l OopStack.num,x
-		sta tmp+9
-		stx tmp+4
-		jsr OopHandlerSaveObjPtr
+			lda.l OopStack.id,x
+			sta tmp+8	;save class id
+			lda.l OopStack.num,x
+			sta tmp+9
+			stx tmp+4
+			jsr OopHandlerSaveObjPtr
 
-		pld
-		plp
-		rts
+			pld
+			plp
+			rts
 
 createOopObjNoSingleton:
-jsr saveClassStr
-lda #0
-jsr saveRoutStr
-/*
-ldy #OOPR.nInit	;get init routine name(relative ptr)
-lda [tmp+1],y
-clc
-and #$ff
-adc tmp+1
-sta.l routStr
-*/
-ldx #0
-jsr OopSeekFreeSlot	;a: relative pointer to slot
-sta tmp+4		;save relative slot pointer
-/*
-flags		db	;msb:obj present bit0:singleton
-id			db	;class id
-pntr		ds 3	;24bit pointer to obj in rom
-dp			dw	;absolute direct page adress on object variable buffer
-init		dw	;obj init subroutine absolute adress
-play		dw	;obj play subroutine absolute adress
-kill		dw	;obj terminate subroutine absolute adress
-*/
+	jsr saveClassStr
+	lda #0
+	jsr saveRoutStr
 
-sep #$20
-ldy #OOPR.flags	;save flags
-lda [tmp+1],y
-sta.l OopStack.flags,x
+	ldx #0
+	jsr OopSeekFreeSlot	;a: relative pointer to slot
+	sta tmp+4		;save relative slot pointer
 
-ldy #OOPR.id
-lda [tmp+1],y
-sta.l OopStack.id,x
-sta tmp+8	;save class id 
-rep #$31
+	sep #$20
+	ldy #OOPR.flags	;save flags
+	lda [tmp+1],y
+	sta.l OopStack.flags,x
 
-lda.w OopObjCount
-sta.l OopStack.num,x
-sta tmp+9
-inc.w OopObjCount
+	ldy #OOPR.id
+	lda [tmp+1],y
+	sta.l OopStack.id,x
+	sta tmp+8	;save class id 
+	rep #$31
 
-lda tmp+1								;save class pointer
-sta.l OopStack.pntr,x
-lda tmp+2
-sta.l OopStack.pntr+1,x
+	lda.w OopObjCount
+	sta.l OopStack.num,x
+	sta tmp+9
+	inc.w OopObjCount
 
-;copy routine pointers
-lda tmp+1
-clc
-adc #OOPR.rInit
-sta.l OopStack.init,x
-lda tmp+1
-clc
-adc #OOPR.rPlay
-sta.l OopStack.play,x
-lda tmp+1
-clc
-adc #OOPR.rKill
-sta.l OopStack.kill,x
+	lda tmp+1								;save class pointer
+	sta.l OopStack.pntr,x
+	lda tmp+2
+	sta.l OopStack.pntr+1,x
 
-ldy #OOPR.zpLen		;allocate ram for obj
-lda [tmp+1],y
-and #$ff
-pha
-clc
-adc OopObjRamPtr
-cmp #OopObjRamEnd-OopObjRam
-bcc createOopObjRamAllocNoOver
+	;copy routine pointers
+	lda tmp+1
+	clc
+	adc #OOPR.rInit
+	sta.l OopStack.init,x
+	lda tmp+1
+	clc
+	adc #OOPR.rPlay
+	sta.l OopStack.play,x
+	lda tmp+1
+	clc
+	adc #OOPR.rKill
+	sta.l OopStack.kill,x
 
-	;no memory left for malloc, throw error
-	pea E_ObjRamFull
-	jsr PrintException
+	ldy #OOPR.zpLen		;allocate ram for obj
+	lda [tmp+1],y
+	and #$ff
+	pha
+	clc
+	adc OopObjRamPtr
+	cmp #OopObjRamEnd-OopObjRam
+	bcc createOopObjRamAllocNoOver
+
+		;no memory left for malloc, throw error
+		pea E_ObjRamFull
+		jsr PrintException
 
 createOopObjRamAllocNoOver:
+	;clear memory for this obj
+	ply			;clear length
+	lda #OopObjRam
+	clc
+	adc OopObjRamPtr
+	sta.l OopStack.dp,x	;store ram base for this obj
+	phx
+	tax				;clear offset
 
-;clear memory for this obj
-ply			;clear length
-lda #OopObjRam
-clc
-adc OopObjRamPtr
-sta.l OopStack.dp,x	;store ram base for this obj
-phx
-tax				;clear offset
+	tya				;udpdate objram-ptr
+	clc
+	adc OopObjRamPtr
+	sta	OopObjRamPtr
+	lda #0		;clear byte
+	jsr ClearWRAM
+	plx
 
-tya				;udpdate objram-ptr
-clc
-adc OopObjRamPtr
-sta	OopObjRamPtr
-lda #0		;clear byte
-jsr ClearWRAM
-plx
-
-txa
-clc
-adc #_sizeof_oopStackObj
-cmp OopObjSlotPtr
-bcc createOopObjNoPtrAdv
-	sta OopObjSlotPtr				;try to keep track of highest obj stack pointer to speed up obj loops
+	txa
+	clc
+	adc #_sizeof_oopStackObj
+	cmp OopObjSlotPtr
+	bcc createOopObjNoPtrAdv
+		sta OopObjSlotPtr				;try to keep track of highest obj stack pointer to speed up obj loops
 	
 createOopObjNoPtrAdv:
+	lda.l OopStack.flags,x	;set "init complete"-flag
+	ora #%100
+	sta.l OopStack.flags,x
 
-lda.l OopStack.flags,x	;set "init complete"-flag
-ora #%100
-sta.l OopStack.flags,x
+	lda.l OopStack.init,x	;exec init routine
+	ldy tmp+11
+	jsr OopHandlerSaveObjPtr
+	jsr OopHandlerExecute
 
-lda.l OopStack.init,x	;exec init routine
-ldy tmp+11
-jsr OopHandlerSaveObjPtr
-jsr OopHandlerExecute
-
-
-pld
-plp
-rts
+	pld
+	plp
+	rts
 
 ;save object hash to return pointer
 ;hash format: 4 bytes:
@@ -330,23 +303,21 @@ OopHandlerSaveObjPtr:
 
 ;gets 8bit obj class number from a, puts 24bit pointer to obj into tmp1
 OopObjFetchPointer:
-php
-phx
-;phy
-and #$ff
-sta tmp
-asl a
-clc
-adc tmp
-tax
-lda.l OopClassLut,x
-sta tmp+1
-lda.l OopClassLut+1,x
-sta tmp+2
-;ply
-plx
-plp
-rts
+	php
+	phx
+	and #$ff
+	sta tmp
+	asl a
+	clc
+	adc tmp
+	tax
+	lda.l OopClassLut,x
+	sta tmp+1
+	lda.l OopClassLut+1,x
+	sta tmp+2
+	plx
+	plp
+	rts
 
 
 ;rep #$31,out:a,16bit:relative pointer to free slot
@@ -355,155 +326,149 @@ OopSeekFreeSlot:
 .INDEX 16
 .ACCU 16
 	OopSeekFreeSlotLoop:
-	lda.l OopStack.flags-1,x
-	bpl OopSeekFreeSlotFound
+		lda.l OopStack.flags-1,x
+		bpl OopSeekFreeSlotFound
 	
-	txa
-	clc
-	adc #_sizeof_oopStackObj
-	tax
-	cmp #OopStackEnd-OopStack
-	bcc OopSeekFreeSlotLoop
+		txa
+		clc
+		adc #_sizeof_oopStackObj
+		tax
+		cmp #OopStackEnd-OopStack
+		bcc OopSeekFreeSlotLoop
 
 	pea E_ObjLstFull
-	;sta errCurr
 	jsr PrintException
 
 OopSeekFreeSlotFound:
-txa
-sec
-rts
+	txa
+	sec
+	rts
 
 ;in:a,8bit: obj id
 OopSeekObjId:
-.INDEX 16
-.ACCU 16
-and #$ff
-sta tmp+4
-OopSeekObjIdLoop:
-	lda.l OopStack.flags-1,x
-	bpl OopSeekObjIdNoObj
-
-	lda.l OopStack.id,x
+	.INDEX 16
+	.ACCU 16
 	and #$ff
-	cmp tmp+4
-	beq OopSeekObjIdFound
+	sta tmp+4
+
+OopSeekObjIdLoop:
+		lda.l OopStack.flags-1,x
+		bpl OopSeekObjIdNoObj
+
+		lda.l OopStack.id,x
+		and #$ff
+		cmp tmp+4
+		beq OopSeekObjIdFound
 	
 	OopSeekObjIdNoObj:	
-	txa
-	clc
-	adc #_sizeof_oopStackObj
-	tax
-	cmp #OopStackEnd-OopStack
-	bcc OopSeekObjIdLoop
+		txa
+		clc
+		adc #_sizeof_oopStackObj
+		tax
+		cmp #OopStackEnd-OopStack
+		bcc OopSeekObjIdLoop
 
-clc
-rts
+	clc
+	rts
 
 OopSeekObjIdFound:
-txa
-sec
-rts
+	txa
+	sec
+	rts
 
 ;in:a,16bit: obj id(lo),count(hi)
 OopSeekObjCountId:
-.INDEX 16
-.ACCU 16
-and #$ff
-sta tmp+4
+	.INDEX 16
+	.ACCU 16
+	and #$ff
+	sta tmp+4
 OopSeekObjCountIdLoop:
-	lda.l OopStack.flags-1,x
-	bpl OopSeekObjCountIdNoObj
+		lda.l OopStack.flags-1,x
+		bpl OopSeekObjCountIdNoObj
 
-	sep #$20
-	lda.l OopStack.num,x
-	xba
-	lda.l OopStack.id,x
-	rep #$31
+		sep #$20
+		lda.l OopStack.num,x
+		xba
+		lda.l OopStack.id,x
+		rep #$31
 
-	cmp tmp+4
-	beq OopSeekObjCountIdFound
+		cmp tmp+4
+		beq OopSeekObjCountIdFound
 	
-	OopSeekObjCountIdNoObj:	
-	txa
-	clc
-	adc #_sizeof_oopStackObj
-	tax
-	cmp #OopStackEnd-OopStack
-	bcc OopSeekObjCountIdLoop
+		OopSeekObjCountIdNoObj:	
+		txa
+		clc
+		adc #_sizeof_oopStackObj
+		tax
+		cmp #OopStackEnd-OopStack
+		bcc OopSeekObjCountIdLoop
 
-clc
-rts
+	clc
+	rts
 
 OopSeekObjCountIdFound:
-txa
-sec
-rts
+	txa
+	sec
+	rts
 
 
 OopHandler:
-php
-phb
-sep #$20
-lda #RAM
-pha
-plb
-rep #$31
-phd
-lda #ZP		;set dp reg to base
-tcd
-pla
-sta dpBuffr	;save direct page
-ldx #0
+	php
+	phb
+	sep #$20
+	lda #RAM
+	pha
+	plb
+	rep #$31
+	phd
+	lda #ZP		;set dp reg to base
+	tcd
+	pla
+	sta dpBuffr	;save direct page
+	ldx #0
+
 OopHandlerLoop:
-	lda.l OopStack.flags-1,x	;get flags
-	bpl OopHandlerSkip	;exit if all active objects have been processed
+		lda.l OopStack.flags-1,x	;get flags
+		bpl OopHandlerSkip	;exit if all active objects have been processed
 	
-		lda.l OopStack.flags,x
-		lsr a										;set/clear carry init
-		lsr a
-		lsr a
-		lda.l OopStack.play,x
+			lda.l OopStack.flags,x
+			lsr a										;set/clear carry init
+			lsr a
+			lsr a
+			lda.l OopStack.play,x
 
-		bcs OopHandlerNoInit
-		 	
-		 	lda.l OopStack.flags,x	;set "init complete"-flag
-		 	ora #%100
-		 	sta.l OopStack.flags,x
-			lda.l OopStack.init,x
+			bcs OopHandlerNoInit
+			 	
+			 	lda.l OopStack.flags,x	;set "init complete"-flag
+			 	ora #%100
+			 	sta.l OopStack.flags,x
+				lda.l OopStack.init,x
 			
-		OopHandlerNoInit:
+			OopHandlerNoInit:
 
-		ldy #0	;clear parameter
-		phx
-		jsr OopHandlerExecute
-		plx
-	OopHandlerSkip:
+			ldy #0	;clear parameter
+			phx
+			jsr OopHandlerExecute
+			plx
+		OopHandlerSkip:
 	
-	txa	;update pntr
-	clc
-	adc #_sizeof_oopStackObj
-	tax
-	cpx OopObjSlotPtr
-	bcc OopHandlerLoop	;loop till > last obj
-	beq	OopHandlerLoop	
+		txa	;update pntr
+		clc
+		adc #_sizeof_oopStackObj
+		tax
+		cpx OopObjSlotPtr
+		bcc OopHandlerLoop	;loop till > last obj
+		beq	OopHandlerLoop	
 	
-;lda stackBuffr	;restore stack and direct page
-;tcs
-
-lda dpBuffr
-tcd
-plb
-plp
-rts
+	lda dpBuffr
+	tcd
+	plb
+	plp
+	rts
 
 ;executes oop routine. in: a,16bit=exec adress pointer in bank $c0. x,16bit=relative oopstack pointer. y,16bit:put into a at call time, parameter
 OopHandlerExecute:
-;	phx
 	sta tmp	;store exec adress
-;	tsc				;save stack
-;	sta stackBuffr
-;	stx tmp+2	;store pointer
 	lda.w FrameCounter
 	sta.w execFrame
 	lda.l OopStack.num,x	;push fingerprint
@@ -525,7 +490,6 @@ OopHandlerExecute:
 	sta tmp+10	;save return data
 	stx tmp+12
 	sty tmp+14
-;	ldx tmp+2	
 	pla
 	sta errCurr
 	plx
@@ -544,12 +508,6 @@ OopHandlerExecute:
 	lda.l OopStack.num,x
 	cmp tmp+2
 	bne execObjRelocated
-
-/*
-	tsc
-	cmp stackBuffr
-	bne OopHandlerStackError
-*/	
 
 	lda errCurr
 	and #$ff	;check if object returned error
@@ -580,8 +538,7 @@ OopHandlerExecute:
 
 		jsr OopHandlerObjRamReorder
 
-	OopHandlerNoError:
-	
+OopHandlerNoError:
 	lda #oopStackTst
 	cmp.w STACK_strt
 	bne OopHandlerStackOverflow
@@ -594,30 +551,25 @@ OopHandlerExecute:
 	ldx tmp+12
 	ldy tmp+14
 
-;	plx
 	rts
 
 execObjRelocated:
-		pea E_Todo
-		jsr PrintException
-		stp
+	pea E_Todo
+	jsr PrintException
+	stp
 
 
 OopHandlerStackError:
 	pea E_StackTrash
-	;sta errCurr
 	bra OopHandlerErrPrint
 
 OopHandlerStackOverflow:
 	pea E_StackOver
-	;sta errCurr
 	bra OopHandlerErrPrint
 
 OopHandlerStackUnderflow:
 	pea E_StackUnder
-	;sta errCurr
 	bra OopHandlerErrPrint
-
 
 OopHandlerSubError:
 OopHandlerErrPrint:
@@ -627,83 +579,81 @@ OopHandlerErrPrint:
 ;input: a,16bit=current obj ram ptr
 ;rearranges obj-ram on obj kill, updates dp-pointers of all subsequent dp-buffers
 OopHandlerObjRamReorder:
-phx
-phy
+	phx
+	phy
 ;todo: fetch memblock-length for this obj from rom, move upper obj-ram block, update dp-pointers of all subsequent objs
-lda.l OopStack.dp,x
-sta tmp+4
-lda.l OopStack.id,x
-jsr OopObjFetchPointer
-ldy #OOPR.zpLen ;get length of zp-ramblock
-lda [tmp+1],y
-and #$ff
-sta tmp+8
-clc
-adc tmp+4
-tax				;source: obj ramblock end
-sta tmp+6
+	lda.l OopStack.dp,x
+	sta tmp+4
+	lda.l OopStack.id,x
+	jsr OopObjFetchPointer
+	ldy #OOPR.zpLen ;get length of zp-ramblock
+	lda [tmp+1],y
+	and #$ff
+	sta tmp+8
+	clc
+	adc tmp+4
+	tax				;source: obj ramblock end
+	sta tmp+6
 
-ldy tmp+4	;target: obj ramblock base
-lda OopObjRamPtr	;calc transfer len, get relative active obj end
-clc
-adc #OopObjRam-1	;make absolute,-1 for mvn length
-sec
-sbc tmp+6
-bcc RamReorderSkip	;don't mvn if length=0-1
+	ldy tmp+4	;target: obj ramblock base
+	lda OopObjRamPtr	;calc transfer len, get relative active obj end
+	clc
+	adc #OopObjRam-1	;make absolute,-1 for mvn length
+	sec
+	sbc tmp+6
+	bcc RamReorderSkip	;don't mvn if length=0-1
 
-	mvn RAM,RAM
-	ldx #0
-	jsr RelocateRamUpdateDpPointers
+		mvn RAM,RAM
+		ldx #0
+		jsr RelocateRamUpdateDpPointers
+
 RamReorderSkip:
+	lda OopObjRamPtr		;update ram end pntr
+	sec
+	sbc tmp+8						;substract ramblock-length of deleted obj
+	sta OopObjRamPtr
 
-lda OopObjRamPtr		;update ram end pntr
-sec
-sbc tmp+8						;substract ramblock-length of deleted obj
-sta OopObjRamPtr
+	jsr AdjustObjSlotPntr
 
-jsr AdjustObjSlotPntr
-
-ply
-plx
-rts
+	ply
+	plx
+	rts
 
 RelocateRamUpdateDpPointers:
-
 	_UpdateDpPointersLoop:
-	lda.l OopStack.flags-1,x
-	bpl _UpdateDpPointersSkip	;skip if no active obj found
+		lda.l OopStack.flags-1,x
+		bpl _UpdateDpPointersSkip	;skip if no active obj found
 	
-		lda.l OopStack.dp,x
-		cmp tmp+4
-		bcc _UpdateDpPointersSkip	;skip if obj ram dp counter lower than that of deleted obj
+			lda.l OopStack.dp,x
+			cmp tmp+4
+			bcc _UpdateDpPointersSkip	;skip if obj ram dp counter lower than that of deleted obj
 		
-			sec
-			sbc tmp+8	;adjust pointer by zp-ramblock-length of killed obj
-			sta.l OopStack.dp,x
+				sec
+				sbc tmp+8	;adjust pointer by zp-ramblock-length of killed obj
+				sta.l OopStack.dp,x
 			
 	_UpdateDpPointersSkip:
-	txa
-	clc
-	adc #_sizeof_oopStackObj
-	tax
-	cmp OopObjSlotPtr
-	bcc _UpdateDpPointersLoop
-
-rts
+		txa
+		clc
+		adc #_sizeof_oopStackObj
+		tax
+		cmp OopObjSlotPtr
+		bcc _UpdateDpPointersLoop
+	rts
 
 ;shave some size off objSlotPntr if possible
 AdjustObjSlotPntr:
-lda OopObjSlotPtr				;check if deleted obj was last. if yes, decrease objslotptr
-beq RamReorderNoSlotPtrMod
-	sec
-	sbc #_sizeof_oopStackObj
-	tax
-	lda.l OopStack.flags-1,x
-	bmi RamReorderNoSlotPtrMod
-		stx OopObjSlotPtr
-		jsr AdjustObjSlotPntr		;recursively seek till last active obj
+	lda OopObjSlotPtr				;check if deleted obj was last. if yes, decrease objslotptr
+	beq RamReorderNoSlotPtrMod
+		sec
+		sbc #_sizeof_oopStackObj
+		tax
+		lda.l OopStack.flags-1,x
+		bmi RamReorderNoSlotPtrMod
+			stx OopObjSlotPtr
+			jsr AdjustObjSlotPntr		;recursively seek till last active obj
 RamReorderNoSlotPtrMod:
-rts
+	rts
 
 initUndefStrs:
 	phx
@@ -760,8 +710,6 @@ saveRoutStr:
 	clc
 	and #$ff
 	adc tmp+1
-;	clc
-;	adc 1,s
 	sta.l routStr
 
 	pla
@@ -777,7 +725,7 @@ staticFastCall:
 	php
 	phb
 	phd
-	
+	;TODO	
 	pld
 	plb
 	plp
@@ -793,12 +741,11 @@ dispatchObjMethodHashVoid:
 	plp
 	rts
 
-
 ;a:args,x:obj hash pointer,y:method to dispatch
 dispatchObjMethod:
 	php
 	phb
-	pea RAM<<8 | RAM
+	pea RAM << 8 | RAM
 	plb
 	plb
 	phd
@@ -818,13 +765,13 @@ dispatchObjMethod:
 		clc		;add direct page pointer if supplied hash pointer is <$ff(=zp)
 		adc tmp
 		tax
+
 dispatchMethNoZP:
 	pla	
 	cpx #oopCreateNoPtr
 	beq dispatchObjMethodHashVoid
 
 	sta tmp+16
-
 	lda.w Hash.pntr,x
 	cmp #oopCreateNoPtr
 	beq dispatchObjMethodHashVoid
@@ -836,11 +783,7 @@ dispatchMethNoZP:
 	and #$ff
 	cmp #MAXOBJID
 	bcs dispatchObjBadHash
-/*
-	lda.w Hash.pntr,x
-	cmp #OopStackEnd
-	bcs dispatchObjBadHash
-*/
+
 	lda.w Hash.pntr,x
 	phx
 	phy
@@ -881,6 +824,7 @@ dispatchObjValidHash:
 	and #$ff
 	cmp tmp+4
 	bcs dispatchObjValidMethod
+
 		pea E_ObjBadMethod
 		jsr PrintException
 		pld
@@ -892,7 +836,6 @@ dispatchObjValidMethod:
 	jsr saveClassStr
 	lda tmp+4
 	jsr saveRoutStr
-
 
 	lda.w Hash.pntr,x
 	tax
@@ -923,3 +866,4 @@ kill:
 	rts
 
 .ends
+

@@ -1,3 +1,4 @@
+.include "routines/conf/snes.registers"
 
 ;kernel zp-vars(used by init,memoryclear,oophandler etc)
 .enum 0
@@ -21,7 +22,12 @@ kernelEnd 	ds 0
 RamBasePtr	ds 3
 .ende
 */
+
+
 ;global defines
+
+
+;program-specific stuff
 .define TILE2BPP	16
 .define TILE4BPP	32
 .define TILE8BPP	64

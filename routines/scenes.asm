@@ -21,4 +21,6 @@ DemoSceneLUT:
 	PTRLONG DemoSceneLUT DemoScene16
 	PTRLONG DemoSceneLUT DemoScene17
 DemoSceneLUTEnd:
+
 .ends
+

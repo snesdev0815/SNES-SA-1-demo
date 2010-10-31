@@ -1,131 +1,118 @@
 	.include "routines/h/memoryclear.h"
 .section "memclear"
-/*
-;partially clears wram to predefined value
-;in: 	a,8bit: number of word to clear memory with. 
-;		x,16bit: target word adress in wram bank $7e
-;		y,16bit: transfer length
-;how to use:
-	rep #$31
-	sep #$20
-	lda.b #0		;clear word: $0000
-	ldy.w #$200
-	ldx.w #PaletteBuffer&$ffff
-	jsr ClearWRAM
-*/	
 
 ClearRegisters:
 	php
 	rep #$31
 	sep #$20
-	LDX #$2101
+	ldx #OBJSEL
 
-MemClearLoop1:		;regs $2101-$210C
-	STZ.w $00,X		;set Sprite,Character,Tile sizes to lowest, and set addresses to $0000
-	INX
-	CPX #$210D
-	BNE MemClearLoop1
+MemClearLoop1:		;regs OBJSEL-BG34NBA
+		stz.w $00,X		;set Sprite,Character,Tile sizes to lowest, and set addresses to $0000
+		inx
+		cpx #BG1HOFS
+		bne MemClearLoop1
 
-MemClearLoop2:		;regs $210D-$2114
-	STZ.w $00,X		;Set all BG scroll values to $0000
-	STZ.w $00,X
-	INX
-	CPX #$2115
-	BNE MemClearLoop2
+MemClearLoop2:		;regs BG1HOFS-BG4VOFS
+		stz.w $00,X		;Set all BG scroll values to $0000
+		stz.w $00,X
+		inx
+		cpx #VMAIN
+		bne MemClearLoop2
 	
-	LDA #$80		;reg $2115
-	STA $2115		; Initialize VRAM transfer mode to word-access, increment by 1
-	STZ $2116		;regs $2117-$2117
-	STZ $2117		;VRAM address = $0000
-	STZ $211A		;clear Mode7 setting
-	LDX #$211B
+	lda #VMAIN_INCREMENT_MODE		;reg VMAIN
+	sta VMAIN		; Initialize VRAM transfer mode to word-access, increment by 1
+	stz VMADDL
+	stz VMADDH		;VRAM address = $0000
+	stz M7SEL		;clear Mode7 setting
+	ldx #M7A
 
-MemClearLoop3:		;regs $211B-$2120
-	STZ.w $00,X		;clear out the Mode7 matrix values
-	STZ.w $00,X
-	INX
-	CPX #$2121
-	BNE MemClearLoop3
-	LDX #$2123
+MemClearLoop3:		;regs M7A-M7Y
+		stz.w $00,X		;clear out the Mode7 matrix values
+		stz.w $00,X
+		inx
+		cpx #CGADD
+		bne MemClearLoop3
+	ldx #W12SEL
 
-MemClearLoop4:		;regs $2123-$2133
-	STZ.w $00,X		;turn off windows, main screens, sub screens, color addition,
-	INX			;fixed color = $00, no super-impose (external synchronization),
-	CPX #$2134		;no interlaced mode, normal resolution
-	BNE MemClearLoop4
+MemClearLoop4:			;regs W12SEL-SETINI
+		stz.w $00,X		;turn off windows, main screens, sub screens, color addition,
+		inx				;fixed color = $00, no super-impose (external synchronization),
+		cpx #MPYL		;no interlaced mode, normal resolution
+		bne MemClearLoop4
 	plp
 	rts
 	
 ClearWRAM:
 	phx
 	phy
-   php
-   phb
-   sep #$20
-   pha
-   lda.b #REGS
-   pha
-   plb
-   pla
+	php
+	phb
+	sep #$20
+	pha
+	lda.b #REGS
+	pha
+	plb
+	pla
 
 ;don't use dma transfer from rom if executing from wram
 .if BSL == RAM2
 	REP #$31		; mem/A = 8 bit, X/Y = 16 bit   
-   and.w #$7	;calculate adress of clear pattern word(8 entries max)
-   asl a
-   adc.w #ClearWramBytePatterns
-   sta tmp
-   SEP #$20
+	and.w #$7	;calculate adress of clear pattern word(8 entries max)
+	asl a
+	adc.w #ClearWramBytePatterns
+	sta tmp
+	SEP #$20
 
-   lda #:ClearWramBytePatterns
-   sta tmp+2
-   
-   rep #$31
-   tya
-   and.w #$fffe         ;word-align counter
-   tay
-   phy
-   ldy.w #0
-   lda [tmp],y
-   ply
+	lda #:ClearWramBytePatterns
+	sta tmp+2
+
+	rep #$31
+	tya
+	and.w #$fffe         ;word-align counter
+	tay
+	phy
+	ldy.w #0
+	lda [tmp],y
+	ply
 
 ClearWRAMLoop:
-   sta.l $7e0000,x
-   inx
-   inx
-   dey
-   dey
-   bne ClearWRAMLoop
+		sta.l RAM << 16,x
+		inx
+		inx
+		dey
+		dey
+		bne ClearWRAMLoop
 
 .else
-   REP #$31		; mem/A = 8 bit, X/Y = 16 bit
-   
-   and.w #$7	;calculate adress of clear pattern word(8 entries max)
-   asl a
-   adc.w #ClearWramBytePatterns
-   sta.w $4312	;dma source
-   
-   SEP #$20
+	rep #$31		; mem/A = 8 bit, X/Y = 16 bit
+	and.w #$7	;calculate adress of clear pattern word(8 entries max)
+	asl a
+	adc.w #ClearWramBytePatterns
+	sta.w DMASRC1L	;dma source
 
-   lda.b #:ClearWramBytePatterns
-   STA $4314         ;Set source bank to $00
-   
-   stx.w $2181	;store target wram adress in bank $7e
-   stz.w $2183	;bank $7e
+	sep #$20
+	lda.b #:ClearWramBytePatterns
+	sta DMASRC1B         ;Set source bank to $00
 
-   LDX #$800a
-   STX $4310         ;Set DMA mode to fixed source, WORD to $2180
+	stx.w WMADDL	;store target wram adress in bank $7e
+	stz.w WMADDH	;bank $7e
 
-   sty.w $4315         ;Set transfer size
-   LDA #$02
-   STA $420B         ;Initiate transfer
+	lda #DMAP_FIXED_TRANSFER | DMAP_1_REG_WRITE_TWICE
+	sta DMAP1         ;Set DMA mode to fixed source, WORD to WMDATA
+	lda #WMDATA & $ff
+	sta DMADEST1
+
+	sty.w DMALEN1L         ;Set transfer size
+	lda #DMA_CHANNEL1_ENABLE
+	sta MDMAEN         ;Initiate transfer
 
 .endif
-   plb
-   plp
-   ply
-   plx
-   RTS
+	plb
+	plp
+	ply
+	plx
+	rts
 
 ;byte patterns to clear wram with.(8 entries max)   
 ClearWramBytePatterns:
@@ -137,106 +124,109 @@ ClearWramBytePatterns:
 
 ;clears whole vram. irqs must be disabled, screen blanked.   
 ClearVRAM:
-   pha
-   phx
-   php
-   phb
-   REP #$30		; mem/A = 8 bit, X/Y = 16 bit
-   SEP #$20
-   lda #REGS
-   pha
-   plb   
-   LDA #$80
-   STA $2115         ;Set VRAM port to word access
-   LDX #$1809
-   STX $4300         ;Set DMA mode to fixed source, WORD to $2118/9
-   LDX #$0000
-   STX $2116         ;Set VRAM port address to $0000
-   ldx #VramClearByte
-   STX $4302         ;Set source address to $xx:0000
-   LDA #:VramClearByte
-   STA $4304         ;Set source bank to $00
-   LDX #$FFFF
-   STX $4305         ;Set transfer size to 64k-1 bytes
-   LDA #$01
-   STA $420B         ;Initiate transfer
-   STZ $2119         ;clear the last byte of the VRAM
-   plb
-   plp
-   plx
-   pla
-   RTS
+	pha
+	phx
+	php
+	phb
+	rep #$30		; mem/A = 8 bit, X/Y = 16 bit
+	sep #$20
+	lda #REGS
+	pha
+	plb   
+	lda #VMAIN_INCREMENT_MODE
+	sta VMAIN         ;Set VRAM port to word access
+	lda #DMAP_FIXED_TRANSFER | DMAP_2_REG_WRITE_ONCE
+	sta DMAP0         ;Set DMA mode to fixed source, WORD to VMDATAL/VMDATAH
+	lda #VMDATAL & $ff
+	sta DMADEST0
+	ldx #$0000
+	stx VMADDL         ;Set VRAM port address to $0000
+	ldx #VramClearByte
+	stx DMASRC0L         ;Set source address to $xx:0000
+	lda #:VramClearByte
+	sta DMASRC0B         ;Set source bank to $00
+	ldx #$FFFF
+	stx DMALEN0L         ;Set transfer size to 64k-1 bytes
+	lda #DMA_CHANNEL0_ENABLE
+	sta MDMAEN         ;Initiate transfer
+	stz VMDATAH         ;clear the last byte of the VRAM
+	plb
+	plp
+	plx
+	pla
+	rts
 
 VramClearByte:
-.db 0
+	.db 0
 
 ;copy random data to wram
 ;in:	tmp0-2 - source pointer
 ;			x							- wram bank $7e target
 ;			y							- transfer length							
 DmaToWRAM:
-   php
-   phb
-   sep #$20
-   pha
-   lda #$80
-   pha
-   plb
-   pla
-   REP #$31		; mem/A = 8 bit, X/Y = 16 bit
-   stz tmp       ;16bit counter
-    sep #$20
+	php
+	phb
+	sep #$20
+	pha
+	lda #REGS
+	pha
+	plb
+	pla
+	rep #$31		; mem/A = 8 bit, X/Y = 16 bit
+	stz tmp       ;16bit counter
+	sep #$20
 
 DMAtoWRAMLoop:
-    phy
-    ldy tmp
-    lda [tmp],y
-    iny
-    sty tmp
-    ply
-    sta.l $7e0000,x
-    inx
-    dey
-    bne DMAtoWRAMLoop
-
-   plb
-   plp
-   RTS
+		phy
+		ldy tmp
+		lda [tmp],y
+		iny
+		sty tmp
+		ply
+		sta.l RAM << 16,x
+		inx
+		dey
+		bne DMAtoWRAMLoop
+	plb
+	plp
+	rts
 
 ;uploads 1 hirom bank to ram bank $7f  
 ROMToWRAM:
-   php
-   phb
-   sep #$20
-   pha
-   lda #$80
-   pha
-   plb
-   pla
-   REP #$31		; mem/A = 8 bit, X/Y = 16 bit
-   
-	stz $4315         ;Set transfer size
-   stz $4312	;dma source
-   stz $2181	;$7f0000
-   SEP #$20
+	php
+	phb
+	sep #$20
+	pha
+	lda #REGS
+	pha
+	plb
+	pla
 
-   lda #ROM
-   STA $4314         ;Set source bank to $00
-   
-   lda.b #1
-   sta.w $2183	;bank $7e
+	rep #$31		; mem/A = 8 bit, X/Y = 16 bit
+	stz DMALEN1L         ;Set transfer size
+	stz DMASRC1L	;dma source
+	stz WMADDL	;$7f0000
 
-   LDX #$8002
-   STX $4310         ;Set DMA mode to inc source, WORD to $2180
+	sep #$20
+	lda #ROM
+	sta DMASRC1B         ;Set source bank to $00
 
-   
-   LDA #$02
-   STA $420B         ;Initiate transfer
-   jml ROMToWRAMJumper
-   
+	lda.b #1
+	sta.w WMADDH	;bank $7e
+
+	lda #DMAP_1_REG_WRITE_TWICE
+	sta DMAP1         ;Set DMA mode to inc source, WORD to WMDATA
+	lda #WMDATA & $ff
+	sta DMADEST1
+
+	lda #DMA_CHANNEL1_ENABLE
+	sta MDMAEN         ;Initiate transfer
+	jml ROMToWRAMJumper
+
 ROMToWRAMJumper:
-   plb
-   plp
-   RTS   
+	plb
+	plp
+	rts
+
 .ends
-   
+

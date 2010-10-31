@@ -1,7 +1,7 @@
-	.include "routines/h/spcinterface.h"
+.include "routines/h/spcinterface.h"
 .section "spchandler"
 
-play_Spc:
+
 /*
 check if spc sends report data
 register spc stimulus callbacks here
@@ -12,38 +12,13 @@ callback routines must all reside in bank $c0
 empty slots are indicated by $ffff
 if an empty slot is encountered while processing an incoming stimulus, an error message is issued
 */
-/*
-	php
-	sep #$20
-;	stz.w $4200			;disable irqs in case we are processing a lengthy spc transfer
 
-	lda.l $2141
-	and.b #$e0
-	cmp.b #$e0
-	bne SpcHandlerNoSpcReport
-
-		rep #$31
-		lda.l $2141			;get report type and select corresponding buffer accordingly
-		and.w #7
-		asl a
-		tax
-		lda.l $2142			;get report word and store in buffer
-		cmp.b SpcReportInstrBuff
-		bne SpcUpdateInstr
-	
-			lda.w #0
-			bra SpcNoUpdateInstr	
-	
-	SpcUpdateInstr:
-		sta.b SpcReportInstrBuff
-	SpcNoUpdateInstr:
-		sta.l SpcReportBuffer,x
-*/
+play_Spc:
 	php
 	rep #$31
-	lda.l $2140
+	lda.l APUIO0
 	pha
-	lda.l $2142
+	lda.l APUIO2
 	pha
 
 	lda 1,s
@@ -53,7 +28,7 @@ if an empty slot is encountered while processing an incoming stimulus, an error 
 	and.w #modStimulusCommand
 	cmp.w #modStimulusCommand
 	bne SpcHandlerNoSpcReport
-		lda 1,s	;lda.l $2141	;try to detect changes first, only trigger callback on changes
+		lda 1,s	;lda.l APUIO1	;try to detect changes first, only trigger callback on changes
 		cmp.b lastStimulusBuffer
 		beq SpcHandlerNoSpcReport
 
@@ -68,9 +43,9 @@ if an empty slot is encountered while processing an incoming stimulus, an error 
 				pea E_SpcNoStimulusCallback
 				jsr PrintException
 
-			execStimulusCallback:
+		execStimulusCallback:
 			tax
-			lda 1,s	;lda.l $2142	;put mod data into a. lower 8 bit is effect data, upper 8bit reserved(maybe note/instrument data in the future)
+			lda 1,s	;lda.l APUIO2	;put mod data into a. lower 8 bit is effect data, upper 8bit reserved(maybe note/instrument data in the future)
 			phd
 			pea ZP
 			pld
@@ -79,42 +54,15 @@ if an empty slot is encountered while processing an incoming stimulus, an error 
 			plp
 			pld
 
-/*
-clearStimulusCallbackBuffer:
-	php
-	rep #$31
-
-	ldy #stimulusCallbackCount
-	ldx #0
-
-	clearStimulusCallbackBufferLoop:
-		lda #stimulusEmpty
-		sta.b stimulusCallbacks.pointer,x
-		txa
-		clc
-		adc.w #_sizeof_callbackBuff
-		tax
-		dey
-		bne clearStimulusCallbackBufferLoop
-		
-	plp
-	rts		
-*/
 SpcHandlerNoSpcReport:
 	pla
 	pla
-;	rep #$31
-;	sep #$20
 	lda.b SpcHandlerState
 	and.w #$1f			;have 32 states maximum
 	asl a
 	tax
 	jsr (SpcHandlerSubroutineJumpLUT,x)
-	
-;	sep #$20
-;	lda.b InterruptEnableFlags	;reenable irqs
-;	sta.w $4200	
-	
+		
 	plp
 	rts
 
@@ -124,33 +72,33 @@ SpcWaitAllCommandsProcessed:
 	sep #$20
 	stz.b SpcStreamVolume
 	jsr SpcStopSong
+
 SpcWaitLoop:
-	lda.b SpcCmdFifoStart
-	cmp.b SpcCmdFifoEnd				;check if fifo is empty
-	bne SpcWaitLoop
+		lda.b SpcCmdFifoStart
+		cmp.b SpcCmdFifoEnd				;check if fifo is empty
+		bne SpcWaitLoop
 	
-	lda.b SpcHandlerState
-	cmp.b #SpcIdle.PTR
-	bne SpcWaitLoop
-	
+		lda.b SpcHandlerState
+		cmp.b #SpcIdle.PTR
+		bne SpcWaitLoop
 	plp
 	rts
 
 kill_Spc:
-jsr SpcStopSongInit
-rep #$31
-lda #OBJR_kill
-sta 3,s
-rts
+	jsr SpcStopSongInit
+	rep #$31
+	lda #OBJR_kill
+	sta 3,s
+	rts
 
 SpcSetReportTypeInit:
 	rep #$31
 	lda.b SpcHandlerArgument0		;store type and sub-arg
-	sta.l $2141
+	sta.l APUIO1
 	sep #$20
 
 	lda.b #SpcCmdReportType		;exec command
-	sta.l $2140
+	sta.l APUIO0
 	
 	lda #SpcSetReportTypeWait.PTR
 	sta.b SpcHandlerState					;goto "wait SE ack"-state
@@ -158,7 +106,7 @@ SpcSetReportTypeInit:
 
 SpcSetReportTypeWait:
 	sep #$20
-	lda.l $2140
+	lda.l APUIO0
 	cmp.b #SpcCmdReportType
 	bne SpcSetReportTypeWaitNoIdle			;wait until spc has ack'd the speed change before returning
 
@@ -171,11 +119,10 @@ SpcSetReportTypeWaitNoIdle:
 SpcSetChMaskInit:
 	sep #$20
 	lda.b SpcHandlerArgument0		;store mask
-	sta.l $2141
-
+	sta.l APUIO1
 
 	lda.b #SpcCmdSetSongChMask		;exec command
-	sta.l $2140
+	sta.l APUIO0
 	
 	lda.b #SpcSetChMaskWait.PTR
 	sta.b SpcHandlerState					;goto "wait SE ack"-state
@@ -183,7 +130,7 @@ SpcSetChMaskInit:
 
 SpcSetChMaskWait:
 	sep #$20
-	lda.l $2140
+	lda.l APUIO0
 	cmp.b #SpcCmdSetSongChMask
 	bne SpcSetChMaskWaitNoIdle			;wait until spc has ack'd the speed change before returing
 
@@ -196,11 +143,10 @@ SpcSetChMaskWaitNoIdle:
 SpcSetSpeedInit:
 	sep #$20
 	lda.b SpcHandlerArgument0		;store speed
-	sta.l $2141
-
+	sta.l APUIO1
 
 	lda.b #SpcCmdSetSongSpeed		;exec command
-	sta.l $2140
+	sta.l APUIO0
 	
 	lda.b #SpcSetSpeedWait.PTR
 	sta.b SpcHandlerState					;goto "wait SE ack"-state
@@ -208,39 +154,24 @@ SpcSetSpeedInit:
 
 SpcSetSpeedWait:
 	sep #$20
-	lda.l $2140
+	lda.l APUIO0
 	cmp.b #SpcCmdSetSongSpeed
 	bne SpcSetSpeedWaitNoIdle			;wait until spc has ack'd the speed change before returing
 
 	lda.b #SpcIdle.PTR
 	sta.b SpcHandlerState					;return to idle once spc has answered
-	
 
 SpcSetSpeedWaitNoIdle:
 	rts	
-	
 	
 SpcUploadSampleset:
 	sep #$20
 	lda.b #SpcCmdUploadSamplePack					;send "upload song" command
 	jsr SpcCmdWaitAck
-/*	
-	sta.l $2140
-	lda.b #SpcUploadSamplesetWait.PTR
-	sta.b SpcHandlerState					;goto "wait for spc to ack song upload" state
-	rts
-	
-SpcUploadSamplesetWait:
-	sep #$20
-	lda.l $2140
-	cmp.b #SpcCmdUploadSamplePack					;wait until spc has ack'd upload song command
-	bne SpcUploadSamplePackWaitExit				;else try again next frame
-*/	
-;	stz.w $4200						;disable irqs
+
 ;upload SamplePack here
 	lda.b SpcHandlerArgument0				;get song number to upload
 	sta.b PtPlayerCurrentSamplePack
-
 	
 	rep #$31				;multiply song number by 3 and use as index into song pointertable
 	and.w #$00ff
@@ -254,12 +185,8 @@ SpcUploadSamplesetWait:
 	sta.b PtPlayerDataPointerLo
 		
 	lda.l PtPlayerSamplePackPointertable+1,x
-	
 	sta.b PtPlayerDataPointerHi	
-;	sep #$20
-;	sta.b PtPlayerDataPointerBa
-	
-;	rep #$31
+
 	ldy.w #$0000
 	lda.b [PtPlayerDataPointerLo],y		;get song length
 	dec a					;substract length word
@@ -271,13 +198,13 @@ SpcUploadSamplesetWait:
 
 SpcUploadSamplePackTransfer1:		
 		lda.b [PtPlayerDataPointerLo],y		;write 3 bytes to ports
-		sta.l $2141
+		sta.l APUIO1
 		iny
 		lda.b [PtPlayerDataPointerLo],y
-		sta.l $2142
+		sta.l APUIO2
 		iny
 		lda.b [PtPlayerDataPointerLo],y
-		sta.l $2143
+		sta.l APUIO3
 		iny
 		
 		lda.b #SpcCmdUploadSongT1		;write ack transfer 1 to port0
@@ -285,13 +212,13 @@ SpcUploadSamplePackTransfer1:
 	
 SpcUploadSamplePackTransfer2:		
 		lda.b [PtPlayerDataPointerLo],y		;write 3 bytes to ports
-		sta.l $2141
+		sta.l APUIO1
 		iny
 		lda.b [PtPlayerDataPointerLo],y
-		sta.l $2142
+		sta.l APUIO2
 		iny
 		lda.b [PtPlayerDataPointerLo],y
-		sta.l $2143
+		sta.l APUIO3
 		iny
 		
 		lda.b #SpcCmdUploadSongT2		;write ack transfer 1 to port0
@@ -301,13 +228,10 @@ SpcUploadSamplePackTransfer2:
 		bcc SpcUploadSamplePackTransfer1
 		
 		lda.b #SpcCmdUploadSamplePackDone		;send "upload song complete" commadn if transfer is done
-		sta.l $2140
+		sta.l APUIO0
 	
 		lda.b #SpcIdle.PTR
 		sta.b SpcHandlerState					;return to idle
-
-;		lda.b InterruptEnableFlags	;reenable irqs
-;		sta.w $4200
 
 SpcUploadSamplePackWaitExit:
 	lda.b SpcUploadedFlag
@@ -320,52 +244,33 @@ SpcUploadSamplePackWaitExit:
 SpcStopSongInit:
 	rep #$31
 	lda #0
-	sta.l $2141
-	sta.l $2142
+	sta.l APUIO1
+	sta.l APUIO2
 	sep #$20
 	lda.b #SpcCmdStopSong		;write ack transfer 1 to port0
 	jsr SpcCmdWaitAck
 
-/*
-	lda.b #SpcCmdStopSong		;exec command
-	sta.l $2140
-	lda.b #SpcStopSongWait.PTR	
-	sta.b SpcHandlerState		;goto "wait SE ack"-state
-	rts
-
-SpcStopSongWait:	
-	sep #$20
-	lda.l $2140
-	cmp.b #SpcCmdStopSong
-	bne SpcStopSongWaitNoIdle			;wait until spc has ack'd the song/stream stop before returing
-*/
 	lda.b #SpcIdle.PTR
 	sta.b SpcHandlerState					;return to idle once spc has answered
-	
 
 SpcStopSongWaitNoIdle:
 	rts
 
-
-
 SpcPlaySoundeffectUpload:
 	rep #$31
 	lda.b SpcHandlerArgument0		;store arguments
-	sta.l $2141
+	sta.l APUIO1
 	lda.b SpcHandlerArgument1
 	and.w #$7fff				;mask off msb and use as wurst
 	ora.b SpcSoundEffectFlipFlag
-	sta.l $2142
+	sta.l APUIO2
 	lda.b SpcSoundEffectFlipFlag
 	eor.w #$8000
 	sta.b SpcSoundEffectFlipFlag
 	sep #$20
 	lda.b #SpcCmdPlaySoundEffect		;exec command
-	sta.l $2140
+	sta.l APUIO0
 	
-	
-;	lda.b #SpcIdle.PTR
-;	sta.b SpcHandlerState					;don't wait
 	lda.b #SpcPlaySoundeffectWait.PTR
 	sta.b SpcHandlerState					;goto "wait SE ack"-state
 	rts
@@ -373,116 +278,104 @@ SpcPlaySoundeffectUpload:
 ;dont use this cause it sometimes plays a sound effect twice
 SpcPlaySoundeffectWait:	
 	sep #$20
-	lda.l $2140
+	lda.l APUIO0
+
 	cmp.b #SpcCmdPlaySoundEffect
 	bne SpcPlaySoundeffectWaitNoIdle			;wait until spc has ack'd the soundeffect before returing
 
 	lda.b #SpcIdle.PTR
 	sta.b SpcHandlerState					;return to idle once spc has answered
-	
 
 SpcPlaySoundeffectWaitNoIdle:
 	rts
 	
 		
 init_Spc:
-		sep #$20
-;		stz.w $4200
-		lda.b #:PtplayerSpcCode
-		ldx.w #PtplayerSpcCode
-		sta.b PtPlayerDataPointerBa
-		stx.b PtPlayerDataPointerLo
-;		jsr PtPlayerInit
-;		php
-;		sep #$20
-;		stz.w $4200
-		REP #$31
-		LDY.w #$0000				;clear data pointer
-		LDA.w #$BBAA
+	sep #$20
+	lda.b #:PtplayerSpcCode
+	ldx.w #PtplayerSpcCode
+	sta.b PtPlayerDataPointerBa
+	stx.b PtPlayerDataPointerLo
 
-		jsr SpcWaitAck
-		
-		SEP #$20
-		LDA.b #$CC				;send "start transfer"
-		BRA PtPlayerInitDoTransfer
+	rep #$31
+	ldy.w #$0000				;clear data pointer
+	lda.w #$BBAA
+	jsr SpcWaitAck
+
+	sep #$20
+	lda.b #$CC				;send "start transfer"
+	bra PtPlayerInitDoTransfer
 
 PtPlayerInitGetByte:
-		LDA.b [PtPlayerDataPointerLo],y
-		INY
-		XBA
-		LDA.b #$00
-		BRA PtPlayerInitClearSpcPort0
+	lda.b [PtPlayerDataPointerLo],y
+	iny
+	xba
+	lda.b #$00
+	bra PtPlayerInitClearSpcPort0
 
 PtPlayerInitGetNextByte:
-		XBA
-		LDA.b [PtPlayerDataPointerLo],y
-		INY
-		XBA
+	xba
+	lda.b [PtPlayerDataPointerLo],y
+	iny
+	xba
+	jsr SpcWaitAck
+	inc a
 
-		jsr SpcWaitAck
-		
-		INC A
 PtPlayerInitClearSpcPort0:
-		REP #$20
-		STA.l $2140
-		SEP #$20
-		DEX
-		BNE PtPlayerInitGetNextByte
+	rep #$20
+	sta.l APUIO0
+	sep #$20
+	dex
+	bne PtPlayerInitGetNextByte
 
-		jsr SpcWaitAck
+	jsr SpcWaitAck
 
 PtPlayerInitAddLoop:
-		ADC.b #$03
-		BEQ PtPlayerInitAddLoop
-
+	adc.b #$03
+	beq PtPlayerInitAddLoop
 
 PtPlayerInitDoTransfer:
-		PHA
-		REP #$20
-		LDA.b [PtPlayerDataPointerLo],y
-		INY
-		INY
-		TAX
-		LDA.b [PtPlayerDataPointerLo],y
-		INY
-		INY
-		STA.l $2142
-		SEP #$20
-		CPX.w #$0001				;whats this?
-		LDA.b #$00
-		ROL A
-		STA.l $2141
-		ADC.b #$7F
-		PLA
-		STA.l $2140
-		cpx.w #$0001				;fix to be able to upload apucode during active nmi
-		bcc PtPlayerInitDone
-/*
-PtPlayerInitSpcWaitLoop4:
-		CMP.l $2140
-		BNE PtPlayerInitSpcWaitLoop4
-*/
-		jsr SpcWaitAck	;hope this doesn't break anything
-		BVS PtPlayerInitGetByte
+	pha
+	rep #$20
+	lda.b [PtPlayerDataPointerLo],y
+	iny
+	iny
+	tax
+	lda.b [PtPlayerDataPointerLo],y
+	iny
+	iny
+	sta.l APUIO2
+	sep #$20
+	cpx.w #$0001				;whats this?
+	lda.b #$00
+	rol a
+	sta.l APUIO1
+	adc.b #$7F
+	pla
+	sta.l APUIO0
+	cpx.w #$0001				;fix to be able to upload apucode during active nmi
+	bcc PtPlayerInitDone
+
+	jsr SpcWaitAck	;hope this doesn't break anything
+	bvs PtPlayerInitGetByte
 
 PtPlayerInitDone:
-		SEP #$20
-		lda.b #SpcIdle.PTR
-		sta.b SpcHandlerState			;go to idle state
+	sep #$20
+	lda.b #SpcIdle.PTR
+	sta.b SpcHandlerState			;go to idle state
 
 ;init some variables
 	lda.b #$a0
 	sta.b SpcSongSpeed			;set speed to default
 	lda.b #$0f
 	sta.b SpcSongChMask			;set song channel mask to default
-;	jsr ClearSpcReportBuffer
 	jsr clearStimulusCallbackBuffer
 	rts
 
 clearStimulusCallbackBuffer:
 	php
-	rep #$31
 
+	rep #$31
 	ldy #stimulusCallbackCount
 	ldx #0
 
@@ -495,24 +388,9 @@ clearStimulusCallbackBuffer:
 		tax
 		dey
 		bne clearStimulusCallbackBufferLoop
-		
 	plp
 	rts		
 
-/*	
-ClearSpcReportBuffer:
-	php
-	rep #$31
-	lda.w #$0000			;clear with y-position at line 255
-	ldx.w #16
-ClearSpcReportBufferLoop:
-	sta.l (SpcReportBuffer &$ffff + $7e0000-2),x
-	dex
-	dex
-	bne ClearSpcReportBufferLoop
-	plp
-	rts	
-*/		
 ;check if there's a new command in the fifo, else return
 ;fifo buffer organization is:
 ;each entry: 1 command byte, 3 argument bytes
@@ -520,23 +398,20 @@ ClearSpcReportBufferLoop:
 SpcIdle:
 	sep #$20
 	lda #0
-	sta.l $2140					;clear port0
+	sta.l APUIO0					;clear port0
 	
 	lda.b SpcCmdFifoStart
 	cmp.b SpcCmdFifoEnd				;check if fifo is empty
 	beq SpcIdleFifoEmpty
 	
 ;theres a spc command present:
-
 	rep #$31
 	and.w #$3f					;limit fifo pointer to 64 bytes
 	tax						
 	lda.b SpcCmdFifo,x				;get command
-	
 	sta.b SpcHandlerState					;store command/state and argument 1
 	
 	lda.b SpcCmdFifo+2,x				;get command
-	
 	sta.b SpcHandlerArgument1				;store arguments 1 and 2
 
 	lda.b SpcHandlerState				;directly execute fetched command
@@ -565,30 +440,12 @@ SpcStopSongWait:
 	
 SpcUploadSong:
 	sep #$20
-
 	lda.b #SpcCmdUploadSong					;send "upload song" command
 	jsr SpcCmdWaitAck
-/*
-	sta.l $2140
 
-	lda.b #SpcUploadSongWait.PTR
-	sta.b SpcHandlerState					;goto "wait for spc to ack song upload" state
-	rts
-	
-SpcUploadSongWait:
-	sep #$20
-
-	lda.l $2140
-	cmp.b #SpcCmdUploadSong					;wait until spc has ack'd upload song command
-	bne SpcUploadSongWaitExit				;else try again next frame
-	
-	jsr SpcWaitAck
-*/	
 ;upload song here
-;	stz.w $4200
 	lda.b SpcHandlerArgument0				;get song number to upload
 	sta.b PtPlayerCurrentSong
-
 	
 	rep #$31				;multiply song number by 3 and use as index into song pointertable
 	and.w #$00ff
@@ -602,12 +459,8 @@ SpcUploadSongWait:
 	sta.b PtPlayerDataPointerLo
 		
 	lda.l SongLUT+1,x
-	
 	sta.b PtPlayerDataPointerHi	
-;	sep #$20
-;	sta.b PtPlayerDataPointerBa
-	
-;	rep #$31
+
 	ldy.w #$0000
 	lda.b [PtPlayerDataPointerLo],y		;get song length
 	dec a					;substract length word
@@ -619,60 +472,52 @@ SpcUploadSongWait:
 
 SpcUploadSongTransfer1:		
 		lda.b [PtPlayerDataPointerLo],y		;write 3 bytes to ports
-		sta.l $2141
+		sta.l APUIO1
 		iny
 		lda.b [PtPlayerDataPointerLo],y
-		sta.l $2142
+		sta.l APUIO2
 		iny
 		lda.b [PtPlayerDataPointerLo],y
-		sta.l $2143
+		sta.l APUIO3
 		iny
 		
 		lda.b #SpcCmdUploadSongT1		;write ack transfer 1 to port0
 		jsr SpcCmdWaitAck
-;		sta.l $2140
-;		jsr SpcWaitAck
 	
 SpcUploadSongTransfer2:		
 		lda.b [PtPlayerDataPointerLo],y		;write 3 bytes to ports
-		sta.l $2141
+		sta.l APUIO1
 		iny
 		lda.b [PtPlayerDataPointerLo],y
-		sta.l $2142
+		sta.l APUIO2
 		iny
 		lda.b [PtPlayerDataPointerLo],y
-		sta.l $2143
+		sta.l APUIO3
 		iny
 		
 		lda.b #SpcCmdUploadSongT2		;write ack transfer 1 to port0
 		jsr SpcCmdWaitAck
-;		sta.l $2140
-;		jsr SpcWaitAck
 			
 		cpy.b PtPlayerSmplBufferPosLo		;check if transfer length is exceeded
 		bcc SpcUploadSongTransfer1
 		
 		lda.b #SpcCmdUploadSongDone		;send "upload song complete" commadn if transfer is done
-		sta.l $2140
+		sta.l APUIO0
 	
 		lda.b #SpcIdle.PTR
 		sta.b SpcHandlerState					;return to idle
-
-;		lda.b InterruptEnableFlags	;reenable irqs
-;		sta.w $4200
 
 SpcUploadSongWaitExit:
 	lda.b SpcUploadedFlag
 	ora.b #$80						;set song uploaded flag.
 	sta.b SpcUploadedFlag
-
 	rts	
 
 ;request command from spc, wait for ack
 SpcCmdWaitAck:
 	php
 	sep #$20
-	sta.l $2140
+	sta.l APUIO0
 	jsr SpcWaitAck
 	plp
 	rts
@@ -687,7 +532,7 @@ SpcWaitAck:
 SpcWaitAckLoop:
 		dex
 		beq SpcWaitAckTimeout
-		cmp.l $2140
+		cmp.l APUIO0
 		bne SpcWaitAckLoop
 	plx
 	plp
@@ -706,7 +551,6 @@ SpcStopSong:
 	and.w #$ff
 	tax	
 	sep #$20
-;	sta.b SpcCmdFifo+1,x
 	lda.b #SpcStopSongInit.PTR
 	sta.b SpcCmdFifo,x
 	
@@ -773,7 +617,6 @@ SpcPlaySoundEffectSimple:
 	plp
 	rts
 
-
 ;in: a,8bit: song number to play
 playSong:
 	php
@@ -800,8 +643,6 @@ playSong:
 	lda.b SpcUploadedFlag
 	and.b #$7f						;clear song uploaded flag. will be set once song upload has been completed later on
 	sta.b SpcUploadedFlag
-;	lda.b SpcCurrentStreamSet		;useful, but messes up if sampleset + song dont fit into spc ram
-;	jsr SpcIssueSamplePackUpload
 	plp
 	rts
 
@@ -832,7 +673,6 @@ playStream:
 	stz.b SpcStreamVolume			;mute eventually playing stream, stop stream
 	plp
 	rts
-	
 	
 ;in: a,8bit: sample pack number to upload
 SpcIssueSamplePackUpload:
@@ -879,14 +719,13 @@ SpcStreamData:
 	
 	tax
 	lda.l StreamSetLut+3,x	;get number of frames for this set
-	sta.l $2141				;write number of frames to stream to spc
-	
+	sta.l APUIO1				;write number of frames to stream to spc
 				
 	sep #$20	
 	lda.b #SpcCmdReceiveStream				;send "upload song" command
-	sta.l $2140
+	sta.l APUIO0
 
-	lda.l $2140
+	lda.l APUIO0
 	cmp.b #SpcCmdReceiveStreamComplete			;don't switch to streamer yet if spc is still finishing the last transfer.(only applicable if last command was streaming)
 	beq SpcStreamDataWaitSpcLastStream
 	
@@ -904,19 +743,17 @@ SpcStreamDataReturnIdle:
 	sta.w HdmaFlags	
 	lda.b #SpcIdle.PTR						;return to idle if spc signalizes that transfer is complete
 	sta.b SpcHandlerState
+
 SpcStreamDataExit:
 	rts
-
 	
 SpcStreamDataWait:
 	sep #$20
-	lda.l $2140
+	lda.l APUIO0
 	cmp.b #SpcCmdReceiveStreamComplete			;check if transfer complete
 	beq SpcStreamDataReturnIdle
 	cmp.b #SpcCmdReceiveStream				;wait until spc has ack'd upload song command
 	bne SpcStreamDataExit					;else try again next frame	
-
-	
 	
 	lda.b SpcCurrentStreamSet				;get current frameset number
 	rep #$31
@@ -933,7 +770,7 @@ SpcStreamDataWait:
 	lda.l StreamSetLut+1,x
 	sta.b _tmp+3
 	
-	lda.l $2141						;get frame request number
+	lda.l APUIO1						;get frame request number
 									;multiply with 144, get pointer to requested frame. warning: one bank holds $1c7 frames, or $fff0 bytes of data. must wrap to next bank if bigger.
 	sta.b _tmp+5					;store frame request number
 	sta.b SpcStreamFrame
@@ -943,7 +780,6 @@ SpcStreamDataWait:
 	bne DontClearSpcStreamFrame
 	
 	stz.b SpcStreamFrame
-
 	
 DontClearSpcStreamFrame:
 	pla
@@ -960,7 +796,6 @@ SpcStreamCalcFrameOffsetLoop:
 	bra SpcStreamCalcFrameOffsetLoop			;do this until we're in the bank the frame actually is in
 
 SpcStreamCalcFrameOffsetNoBankWrap:
-	
 	asl a							;multiply by 144
 	asl a
 	asl a
@@ -1003,7 +838,7 @@ SpcStreamSetupHdmaTableLoop:
 	lda.w #1
 	sta.l HdmaSpcBuffer,x				;one line
 	
-	lda.b [_tmp+2],y				;brr data to ports $2140-$2143
+	lda.b [_tmp+2],y				;brr data to ports APUIO0-APUIO3
 	sta.l HdmaSpcBuffer+1,x
 
 	iny
@@ -1018,15 +853,13 @@ SpcStreamSetupHdmaTableLoop:
 	inx
 	inx
 	
-;	iny
-;	iny
 	iny
 	iny
 
 	lda.w #1
 	sta.l HdmaSpcBuffer,x				;one line
 	
-	lda.b [_tmp+2],y				;brr data to ports $2140-$2143
+	lda.b [_tmp+2],y				;brr data to ports APUIO0-APUIO3
 	sta.l HdmaSpcBuffer+1,x
 
 	iny
@@ -1041,8 +874,6 @@ SpcStreamSetupHdmaTableLoop:
 	inx
 	inx
 	
-;	iny
-;	iny
 	iny
 	iny	
 	dec.b _tmp
@@ -1050,16 +881,13 @@ SpcStreamSetupHdmaTableLoop:
 
 ;this doesnt work right. reason is that the the stream data sometimes contains "false" commands.
 ;write spc command here: (only play soundeffect, stop song/stream is allowed here)
-
 	stz.b _tmp				;clear spc command field
 	stz.b _tmp+2
 	lda.w #1
 	sta.l HdmaSpcBuffer,x				;one line
-	
 
 	lda.b _tmp
 	sta.l HdmaSpcBuffer+1,x				
-
 	
 	lda.b _tmp+2
 	sta.l HdmaSpcBuffer+3,x
@@ -1075,21 +903,21 @@ SpcStreamSetupHdmaTableLoop:
 	sta.l HdmaSpcBuffer,x
 	
 	lda.w #HdmaSpcBuffer & $ffff
-	sta.l $4372					;hdma source offset
+	sta.l DMASRC7L					;hdma source offset
 	
 	sep #$20
 	lda.w HdmaFlags
-	ora.b #$80					;enable spc stream on hdma channel 7
+	ora.b #DMA_CHANNEL7_ENABLE					;enable spc stream on hdma channel 7
 	sta.w HdmaFlags
 	
-	lda.b #$7e					;hdma source bank
-	sta.l $4374
+	lda.b #RAM					;hdma source bank
+	sta.l DMASRC7B
 	
-	lda.b #%00000100				;hdma config, direct, 4 regs write once
-	sta.l $4370
+	lda.b #DMAP_4_REG_WRITE_ONCE				;hdma config, direct, 4 regs write once
+	sta.l DMAP7
 	
-	lda.b #$40					;bbus target, apu port $2140-$2143
-	sta.l $4371
+	lda.b #APUIO0 & $ff					;bbus target, apu port APUIO0-APUIO3
+	sta.l DMADEST7
 	
 	rts
 	
@@ -1097,12 +925,10 @@ SpcStreamSetupHdmaTableLoop:
 SpcSetSongSpeed:
 	php
 	rep #$31
-;	pha					;push speed
 	lda.b SpcCmdFifoEnd			;get current position in spc command fifo buffer		
 	and.w #$ff
 	tax
 	
-;	pla					;fetch speed again
 	sep #$20
 	lda.b SpcSongSpeed
 	sta.b (SpcCmdFifo+1),x
@@ -1115,10 +941,6 @@ SpcSetSongSpeed:
 	and.b #$3f				;16x4byte entries maximum 
 	sta.b SpcCmdFifoEnd
 	
-;	stz.b SpcStreamVolume			;mute eventually playing stream, stop stream
-	
-;	lda.b SpcCurrentStreamSet		;useful, but messes up if sampleset + song dont fit into spc ram
-;	jsr SpcIssueSamplePackUpload
 	plp
 	rts
 
@@ -1155,7 +977,6 @@ SpcSetReportType:
 	and.w #$ff
 	tax
 	
-;	lda.b SpcReportType			;use A as input, not some variable
 	pla
 	and.w #$ff07				;8 types max + argument
 	sta.b (SpcCmdFifo+1),x
@@ -1178,8 +999,6 @@ registerStimulusCallback:
 	rep #$31
 	ldx #3*_sizeof_callbackBuff		;hack, this should be dynamically selectable instead
 	sta.b stimulusCallbacks.pointer,x
-;	pea E_Todo
-;	jsr PrintException
 
 	plp
 	rts
@@ -1194,29 +1013,5 @@ PtPlayerUploadVolEcho:
 SpcPlaySoundEffectObjectXPos:
 	pea E_Todo
 	jsr PrintException
-/*
-	php
-	rep #$31
-	pha
-	ldx.b ObjectListPointerCurrent
-	lda.w ObjEntryXPos,x				;get upper 4 nibbles of x-pos
-	lsr a												;remove subpixel prec
-	lsr a
-	lsr a
-	lsr a
-	
-	lsr a						;use bits 6-4 for panning
-	and.w #$7f					;clear sign
-	ora.w #$0F					;set max volume
-	xba
-	tax
-	pla
-	sep #$20
-
-	jsr SpcPlaySoundEffect	
-
-	plp
-	rts
-*/
 		
 .ends

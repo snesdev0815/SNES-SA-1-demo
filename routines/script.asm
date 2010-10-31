@@ -13,7 +13,7 @@ have:
 
 ;hacky, should be define, but wla is too stupid to resolve this as a define
 NumOfScripts:
-.dw (scriptLUTEnd-scriptLUT)/2
+	.dw (scriptLUTEnd-scriptLUT)/2
 
 init_Script:
 	rep #$31
@@ -46,6 +46,7 @@ collectGarbage:
 	rep #$31
 	ldy #NumOfHashptr
 	ldx #hashPtr
+
 	collectGarbageLoop:		;kill all objects that were instanciated in current script 
 		lda #0
 		phy
@@ -70,6 +71,7 @@ initHashPointers:
 	rep #$31
 	ldy #NumOfHashptr
 	ldx #0
+
 	initHashPointersLoop:
 		lda #oopCreateNoPtr
 		sta hashPtr.1.pntr,x
@@ -83,7 +85,6 @@ initHashPointers:
 	rts
 
 play_Script:
-;	phb
 	sep #$20
 	lda #$22
 	sta.l SelfModJSL
@@ -103,7 +104,6 @@ play_Script:
 	pla
 	and.w #%100	;preserve irq flag
 	ora buffFlags
-;	lda buffFlags
 	pha
 	lda currPC
 	sta.l SelfModJSL+1
@@ -116,7 +116,6 @@ play_Script:
 	
 	jsl SelfModJSL
 	
-;	plb
 	rts
 	
 SavePC:
@@ -136,27 +135,7 @@ SavePC:
 	rts
 
 WaitReturn:
-
 	rtl
-
-/*
-	php
-	rep #$31
-	sta buffA
-	stx buffY
-	sty buffY
-
-
-	lda buffFlags
-	pha
-	rep #$31
-	lda currPC
-	sta.l SelfModJSL+1
-	
-	lda buffA
-	ldx buffY
-	ldy buffY
-*/
 
 ;script obj kill routine, for external calls
 kill_Script:
@@ -178,7 +157,7 @@ terminateScript:
 		jsr PrintException
 		stp
 
-	terminateScriptStackOk:
+terminateScriptStackOk:
 	jsr collectGarbage
 	tsc
 	clc

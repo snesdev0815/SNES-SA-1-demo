@@ -34,9 +34,9 @@ PrintException:
 	plb
 	plb
 	sei							;disable screen,irqs
-	lda #$80
-	sta $2100
-	stz $4200
+	lda #INIDSP_FORCE_BLANK
+	sta INIDSP
+	stz NMITIMEN
 
 	;save cpu status:
 	pla
@@ -55,38 +55,42 @@ PrintException:
 	sta.l excFlags
 
 	rep #$31
-
-	
 	jsr ClearRegisters
 	jsr ClearVRAM
-	lda #$1801			;upload font tiles
-	sta $4300 
+
+	sep #$20
+	lda #DMAP_2_REG_WRITE_ONCE			;upload font tiles
+	sta DMAP0
+	lda #VMDATAL & $ff
+	sta DMADEST0
+
+	rep #$31
 	lda #ExcFontTiles.LEN
-	sta $4305
+	sta DMALEN0L
 	lda #($2000+(TILE2BPP*32))/2	;vram target,after tilemap and after first 128 ascii chars
-	sta $2116
+	sta VMADDL
 	lda #ExcFontTiles			;dma source
-	sta $4302
+	sta DMASRC0L
 	sep #$20
 	lda #:ExcFontTiles
-	sta $4304
-	lda #$80
-	sta $2115			;set VRAM transfer mode to word-access, increment by 1
-	lda #$01
-	sta $420b
+	sta DMASRC0B
+	lda #VMAIN_INCREMENT_MODE
+	sta VMAIN			;set VRAM transfer mode to word-access, increment by 1
+	lda #DMA_CHANNEL0_ENABLE
+	sta MDMAEN
 
-	stz $2121			;upload pal
+	stz CGADD			;upload pal
 	ldx #ExcFontPal			;start at color 0 
-	stx $4302			;Store the data offset into DMA source offset
+	stx DMASRC0L			;Store the data offset into DMA source offset
 	ldx #ExcFontPal.LEN
-	stx $4305   			;Store the size of the data block
+	stx DMALEN0L   			;Store the size of the data block
 	lda #:ExcFontPal
-	sta $4304			;Store the data bank holding the tile data
-	stz $4300       
-	lda #$22    			;Set the destination register ( $2122: CG-RAM Write )
-	sta $4301      
-	lda #$01    			;Initiate the DMA transfer
-	sta $420B
+	sta DMASRC0B			;Store the data bank holding the tile data
+	stz DMAP0
+	lda #CGDATA & $ff    			;Set the destination register ( CGDATA: CG-RAM Write )
+	sta DMADEST0
+	lda #DMA_CHANNEL0_ENABLE    			;Initiate the DMA transfer
+	sta MDMAEN
 
 	rep #$31					;print main exception text
 	
@@ -100,9 +104,8 @@ PrintException:
 	and #$ff
 	cmp #errStrt
 	bcc ExceptionNoErrMsg
-
-									;fetch corresponding string for this err-msg
-		and #$ff
+									
+		and #$ff				;fetch corresponding string for this err-msg
 		tax
 		lda.l ExcErrMsgStrLut-errStrt,x
 		and #$ff
@@ -110,18 +113,16 @@ PrintException:
 		jsr ExceptionPrintLoop
 
 ExceptionNoErrMsg:
-
 	sep #$20
-	lda #1			;set up some regs
-	sta $210b
-	lda #%1
-	sta $212c
-	lda #$1f
-	sta $2100
+	lda #BG1NBA_2000			;set up some regs
+	sta BG12NBA
+	lda #T_BG1_ENABLE
+	sta TMAIN
+	lda #INIDSP_BRIGHTNESS
+	sta INIDSP
 	
-;die
 -
-	jmp -
+	jmp -			;die
 	stp
 	
 ;print string to vram port	
@@ -139,7 +140,7 @@ PrintLoop:
 		bra PrintLoop
 
 		ExceptionTilemapPrint:
-			sta $2118
+			sta VMDATAL
 			iny
 			bra PrintLoop
 
@@ -172,7 +173,7 @@ ExceptionVramPointer:
 	sta tmp+4		;screen position
 	clc
 	adc #vramBase
-	sta $2116
+	sta VMADDL
 	rts
 	
 PrintCmd:
@@ -227,7 +228,7 @@ SUB_TC_iSub:
 	rep #$31
 	lda [tmp],y ;get argument, pointer to substring to load
 	tax
-	lda.l $7e0000,x
+	lda.l RAM << 16,x
 	plb
 	
 	jsr ExceptionStrPointer	
@@ -294,10 +295,10 @@ SUB_TC_diSub:
 	rep #$31
 	lda [tmp],y ;get argument, pointer to substring-pointer to load
 	tax
-	lda.l $7e0000,x
+	lda.l RAM << 16,x
 	sta tmp
 	inx
-	lda.l $7e0000,x
+	lda.l RAM << 16,x
 	sta tmp+1
 	plb
 
